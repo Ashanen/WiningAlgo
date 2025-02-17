@@ -1,19 +1,11 @@
-package main
-
-import API_KEY
-import SECRET_KEY
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
 import engine.StrategyEngine
 import executor.RealTradeExecutor
 import executor.SimulationTradeExecutor
 import leverage.fetchHistoricalCandles
-import model.Kline
 import org.slf4j.LoggerFactory
 import parser.CandleParser
-import strategy.AlphaBollingerStrategy
-import strategy.BollingerScalpingStrategy
-import strategy.BreakoutStrategy
-import strategy.MeanReversionStrategy
+import strategy.*
 
 fun main() {
     val isBacktest = true
@@ -23,35 +15,6 @@ fun main() {
     } else {
         realTrading()
     }
-}
-
-fun backtestModular() {
-    val logger = LoggerFactory.getLogger("BacktestModular")
-
-    val futuresClient = UMFuturesClientImpl(API_KEY, SECRET_KEY)
-    val simulationExecutor = SimulationTradeExecutor()
-    val strategy = AlphaBollingerStrategy()
-    val engine = StrategyEngine(simulationExecutor, strategy)
-    engine.capital = 1000.0
-
-    // 2) Pobieramy dane z Binance
-    val params = linkedMapOf<String, Any>(
-        "symbol" to "BTCUSDT",
-        "interval" to "15m",
-        "limit" to 1000
-    )
-    val result = futuresClient.market().klines(params)
-
-    // 3) Parsujemy JSON
-    val historicalCandles = CandleParser.parseCandles(result)
-    logger.info("Loaded {} historical candles", historicalCandles.size)
-
-    // 4) Iterujemy
-    for (candle in historicalCandles) {
-        engine.processCandle(candle)
-    }
-
-    logger.info("Backtest done. Final capital = {}", engine.capital)
 }
 
 fun realTrading() {
@@ -78,10 +41,11 @@ fun backtestMultipleStrategies() {
     // Inicjuj client, parser
     val futuresClient = UMFuturesClientImpl(API_KEY, SECRET_KEY)
 
+    val interval = "15m"
     val result = futuresClient.market().klines(
         linkedMapOf<String, Any>(
             "symbol" to "BTCUSDT",
-            "interval" to "15m",
+            "interval" to interval,
             "limit" to 1000
         )
     )
@@ -90,10 +54,8 @@ fun backtestMultipleStrategies() {
 
     // Lista strategii
     val strategies = listOf(
-        AlphaBollingerStrategy(),
-        MeanReversionStrategy(),
-        BreakoutStrategy(),
-        BollingerScalpingStrategy()
+        BollingerScalpTrendStrategy(),
+        RSIOverboughtOversoldTrendStrategy(),
     )
 
     for (strat in strategies) {

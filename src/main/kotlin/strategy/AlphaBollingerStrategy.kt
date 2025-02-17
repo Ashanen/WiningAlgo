@@ -1,51 +1,36 @@
 package strategy
 
-import compute.ExtraFilters.averageVolume
-import compute.ExtraFilters.isInTradingHours
 import compute.Indicators
 import model.Kline
 import model.OpenPosition
-import model.StrategySignal
 import model.SignalType
-import kotlin.math.min
+import model.StrategySignal
 import kotlin.math.max
+import kotlin.math.min
 
 class AlphaBollingerStrategy(
     override val name: String = "AlphaBollingerStrategy"
 ) : Strategy {
 
-    private val bbPeriod = 20
-    private val bbMultiplier = 2.0
+    // Zmodyfikowane parametry
+    private val bbPeriod = 24               // np. 24 zamiast 20
+    private val bbMultiplier = 2.2          // np. 2.2 zamiast 2.0
     private val lookbackPeriod = 20
-    private val riskRewardRatio = 3.0
-    private val minRiskPerUnitMultiplier = 0.025
-    private val maxRiskUsd = 100.0
-    private val riskPercentage = 0.05
+    private val riskRewardRatio = 2.5       // zmniejszamy z 3.0 do 2.5
+    private val minRiskPerUnitMultiplier = 0.03
+    private val maxRiskUsd = 150.0
+    private val riskPercentage = 0.04       // nieco mniejszy/mniejszy od 0.05
 
-    // Nowe parametry filtrów
-    private val startHour = 8    // handluj od 08:00 UTC
-    private val endHour = 20     // do 20:00 UTC
-    private val volPeriod = 20   // z ilu świec liczyć średni wolumen
-    private val volMultiplier = 0.8 // aktualny wolumen musi być > 0.8 * avgVol
-
-    override fun onNewCandle(candle: Kline, candles: List<Kline>, capital: Double): List<StrategySignal> {
+    override fun onNewCandle(
+        candle: Kline,
+        candles: List<Kline>,
+        capital: Double
+    ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
-
-        // 1) Filtr godzinowy
-        if (!isInTradingHours(candle, startHour, endHour)) {
-            return signals
-        }
-
-        // 2) Filtr wolumenu
-        val avgVol = averageVolume(candles, volPeriod)
-        val currentVol = candle.volume.toDoubleOrNull() ?: 0.0
-        if (avgVol.isNaN() || currentVol < avgVol * volMultiplier) {
-            return signals
-        }
         val closePrices = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closePrices.size < bbPeriod) return signals
 
-        // Bollinger
+        // 1) Oblicz Bollinger
         val bb = Indicators.computeBollingerBands(
             prices = closePrices.takeLast(bbPeriod),
             period = bbPeriod,
@@ -55,13 +40,14 @@ class AlphaBollingerStrategy(
         val lowerBand = bb.lower.last()
 
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
-        // RSI
+
+        // 2) RSI (opcjonalnie) – np. weryfikujemy warunek rsi > 50 / < 50
         val rsiList = Indicators.computeRsi(closePrices, 14)
         val rsi = rsiList.lastOrNull() ?: 50.0
 
-        // ATR (z ostatnich lookbackPeriod świec)
-        val lastCandles = candles.takeLast(lookbackPeriod)
-        val atr = Indicators.calculateATR(lastCandles)
+        // 3) ATR do wyliczenia ryzyka
+        val recentCandles = candles.takeLast(lookbackPeriod)
+        val atr = Indicators.calculateATR(recentCandles)
 
         // Warunek BUY
         if (price > upperBand && rsi > 50) {
@@ -75,11 +61,11 @@ class AlphaBollingerStrategy(
 
             signals.add(
                 StrategySignal(
-                    SignalType.BUY,
-                    price,
-                    stopLoss,
-                    takeProfit,
-                    quantity
+                    type = SignalType.BUY,
+                    price = price,
+                    stopLoss = stopLoss,
+                    takeProfit = takeProfit,
+                    quantity = quantity
                 )
             )
         }
@@ -95,11 +81,11 @@ class AlphaBollingerStrategy(
 
             signals.add(
                 StrategySignal(
-                    SignalType.SELL,
-                    price,
-                    stopLoss,
-                    takeProfit,
-                    quantity
+                    type = SignalType.SELL,
+                    price = price,
+                    stopLoss = stopLoss,
+                    takeProfit = takeProfit,
+                    quantity = quantity
                 )
             )
         }
@@ -107,26 +93,36 @@ class AlphaBollingerStrategy(
         return signals
     }
 
-    override fun onUpdatePosition(candle: Kline, openPosition: OpenPosition): List<StrategySignal> {
+    override fun onUpdatePosition(
+        candle: Kline,
+        openPosition: OpenPosition
+    ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
-        // ATR z jednej świecy to 0 -> zrobmy minimalny offset
-        val atr = Indicators.calculateATR(listOf(candle)).coerceAtLeast(1.0)
 
+        // Przykład: trailing stop oparty na ATR
+        // Zamiast brać ATR z 1 świecy, można brać np. candles.takeLast(N).
+        // Dodatkowo można mnożyć ATR x 1.5, by trailingStop był szerszy.
+
+        val atr =  Indicators.calculateATR(listOf(candle)) // lub candles.takeLast(10)
+        val multiplier = 1.5                               // mocniejszy trailing
         when (openPosition.side) {
             "BUY" -> {
                 if (price > openPosition.maxFavorable) {
                     openPosition.maxFavorable = price
                 }
-                val trailingStop = openPosition.maxFavorable - atr
-                if (price <= trailingStop || price >= openPosition.takeProfit || price <= openPosition.stopLoss) {
+                val trailingStop = openPosition.maxFavorable - (atr * multiplier)
+                if (price <= trailingStop
+                    || price >= openPosition.takeProfit
+                    || price <= openPosition.stopLoss
+                ) {
                     signals.add(
                         StrategySignal(
-                            SignalType.CLOSE,
-                            price,
-                            0.0,
-                            0.0,
-                            openPosition.quantity
+                            type = SignalType.CLOSE,
+                            price = price,
+                            stopLoss = 0.0,
+                            takeProfit = 0.0,
+                            quantity = openPosition.quantity
                         )
                     )
                 }
@@ -135,20 +131,24 @@ class AlphaBollingerStrategy(
                 if (price < openPosition.minFavorable) {
                     openPosition.minFavorable = price
                 }
-                val trailingStop = openPosition.minFavorable + atr
-                if (price >= trailingStop || price <= openPosition.takeProfit || price >= openPosition.stopLoss) {
+                val trailingStop = openPosition.minFavorable + (atr * multiplier)
+                if (price >= trailingStop
+                    || price <= openPosition.takeProfit
+                    || price >= openPosition.stopLoss
+                ) {
                     signals.add(
                         StrategySignal(
-                            SignalType.CLOSE,
-                            price,
-                            0.0,
-                            0.0,
-                            openPosition.quantity
+                            type = SignalType.CLOSE,
+                            price = price,
+                            stopLoss = 0.0,
+                            takeProfit = 0.0,
+                            quantity = openPosition.quantity
                         )
                     )
                 }
             }
         }
+
         return signals
     }
 }

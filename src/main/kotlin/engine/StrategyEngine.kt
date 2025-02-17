@@ -9,7 +9,11 @@ import org.slf4j.LoggerFactory
 import strategy.Strategy
 
 /**
- * Silnik backtest/real
+ * Podstawowy silnik, który:
+ *  - trzyma capital,
+ *  - trzyma openPosition (tylko 1 na raz),
+ *  - wywołuje onNewCandle / onUpdatePosition,
+ *  - wysyła zlecenia do tradeExecutor (Real / Simulation)
  */
 class StrategyEngine(
     private val tradeExecutor: TradeExecutor,
@@ -19,30 +23,21 @@ class StrategyEngine(
 
     var capital: Double = 1000.0
     private var openPosition: OpenPosition? = null
-    private var lastCandleIndex = -1
 
-    // Używamy do liczenia indeksów
     private val processedCandles = mutableListOf<Kline>()
 
-    /**
-     * Metoda wywoływana przy każdej nowej świecy
-     */
     fun processCandle(candle: Kline) {
         processedCandles.add(candle)
-        val currentIndex = processedCandles.size - 1
-        if (!candle.isClosed) return  // czekamy na zamknięcie świecy
 
-        // 1) Jeśli nie mamy pozycji, sprawdzamy sygnały onNewCandle
+        // czekamy, aż świeca się zamknie
+        if (!candle.isClosed) return
+
+        // jeśli nie ma pozycji, sprawdzamy sygnały
         if (openPosition == null) {
-            val signals = strategy.onNewCandle(
-                candle,
-                processedCandles, // lub processedCandles.take(currentIndex+1)
-                capital
-            )
-            // otwieramy pozycję TYLKO jeśli sygnał jest BUY/SELL
+            val signals = strategy.onNewCandle(candle, processedCandles, capital)
             signals.forEach { sig ->
                 if (sig.type == SignalType.BUY || sig.type == SignalType.SELL) {
-                    val sideName = sig.type.name  // "BUY"/"SELL"
+                    val sideName = sig.type.name
                     openPosition = OpenPosition(
                         side = sideName,
                         entryPrice = sig.price,
@@ -54,7 +49,6 @@ class StrategyEngine(
                     )
                     logger.info("Opened position: {}, capital={}", openPosition, capital)
 
-                    // Wywołanie real/sim trade executor
                     val ok = tradeExecutor.openTrade(
                         sideName,
                         sig.quantity,
@@ -67,14 +61,11 @@ class StrategyEngine(
                     }
                 }
             }
-            // UWAGA: Nie wywołujemy onUpdatePosition w tej samej świecy => brak natychmiastowego zamknięcia
-        }
-        // 2) Jeśli mamy otwartą pozycję => sprawdzamy onUpdatePosition
-        else {
+        } else {
+            // mamy pozycję => sprawdzamy trailing / exit
             val exitSignals = strategy.onUpdatePosition(candle, openPosition!!)
             exitSignals.forEach { sig ->
                 if (sig.type == SignalType.CLOSE) {
-                    // Zamykamy pozycję
                     val exitPrice = sig.price
                     val profit = if (openPosition!!.side == "BUY") {
                         (exitPrice - openPosition!!.entryPrice) * openPosition!!.quantity
@@ -84,7 +75,6 @@ class StrategyEngine(
                     capital += profit
                     logger.info("Closed position with profit={}, new capital={}", profit, capital)
 
-                    // Wywołanie tradeExecutor
                     val ok = tradeExecutor.closeTrade(
                         openPosition!!.side,
                         openPosition!!.quantity,

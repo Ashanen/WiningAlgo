@@ -15,7 +15,7 @@ data class BollingerBands(
 
 object Indicators {
 
-    // 1) RSI - zwraca listę wartości
+    // 1) RSI
     fun computeRsi(prices: List<Double>, period: Int = 14): List<Double> {
         val rsiList = MutableList(prices.size) { NaN }
         if (prices.size < period) return rsiList
@@ -78,7 +78,7 @@ object Indicators {
         return BollingerBands(middle, upper, lower)
     }
 
-    // 3) ATR - pojedyncza wartość (z całej listy)
+    // 3) ATR - pojedyncza wartość
     fun calculateATR(candles: List<Kline>): Double {
         if (candles.size < 2) return 0.0
         val trueRanges = mutableListOf<Double>()
@@ -92,7 +92,7 @@ object Indicators {
         return if (trueRanges.isNotEmpty()) trueRanges.average() else 0.0
     }
 
-    // 4) computeSma - do MeanReversionStrategy
+    // 4) computeSma
     fun computeSma(values: List<Double>, period: Int): List<Double> {
         val result = MutableList(values.size) { NaN }
         if (period <= 0) return result
@@ -105,7 +105,7 @@ object Indicators {
         return result
     }
 
-    // 5) computeMaAngle - do MeanReversionStrategy
+    // 5) computeMaAngle
     fun computeMaAngle(ma: List<Double>, point: Double = 0.0001): List<Double> {
         val angleList = MutableList(ma.size) { NaN }
         for (i in 1 until ma.size) {
@@ -116,7 +116,7 @@ object Indicators {
         return angleList
     }
 
-    // 6) computeAtr - do MeanReversionStrategy (lista)
+    // 6) computeAtr - lista
     fun computeAtr(candles: List<Kline>, period: Int = 14): List<Double> {
         val size = candles.size
         val atr = MutableList(size) { NaN }
@@ -141,7 +141,7 @@ object Indicators {
         }
         atr[period - 1] = sumTR / period
 
-        // ATR = EMA(RMA) z TR
+        // ATR = RMA( TR )
         for (i in period until size) {
             if (trList[i].isNaN() || atr[i - 1].isNaN()) continue
             val prevAtr = atr[i - 1]
@@ -150,4 +150,22 @@ object Indicators {
         }
         return atr
     }
+    fun computeEma(prices: List<Double>, period: Int): List<Double> {
+        val result = MutableList(prices.size) { Double.NaN }
+        if (prices.isEmpty() || period <= 0) return result
+
+        val multiplier = 2.0 / (period + 1)
+        // Pierwszą wartość EMA możemy zainicjalizować np. pierwszą ceną (lub SMA z początkowego okna).
+        var prevEma = prices.first()
+        result[0] = prevEma
+
+        for (i in 1 until prices.size) {
+            val price = prices[i]
+            val ema = (price - prevEma) * multiplier + prevEma
+            result[i] = ema
+            prevEma = ema
+        }
+        return result
+    }
+
 }
