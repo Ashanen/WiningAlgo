@@ -1,12 +1,12 @@
-package multi
+package strategy
 
-import compute.computeBollingerBands
-import compute.computeRsi
+import compute.Indicators
 import convert.toCloseDouble
 import model.Kline
-import model.Signal
-import model.SignalType
-import trading.TradingStrategy
+import model.OpenPosition
+import strategy.SignalType.*
+import kotlin.math.min
+import kotlin.math.max
 
 class BollingerScalpingStrategy(
     private val bbPeriod: Int = 20,
@@ -14,37 +14,69 @@ class BollingerScalpingStrategy(
     private val rsiPeriod: Int = 14,
     private val rsiBuyThreshold: Double = 30.0,
     private val rsiSellThreshold: Double = 70.0
-) : TradingStrategy {
+) : Strategy {
 
     override val name: String = "BollingerScalping"
 
-    override fun generateSignals(klines: List<Kline>): List<Signal> {
-        val signals = mutableListOf<Signal>()
+    override fun onNewCandle(
+        candle: Kline,
+        candles: List<Kline>,
+        capital: Double
+    ): List<StrategySignal> {
+        val signals = mutableListOf<StrategySignal>()
 
-        // 1) Przygotuj listę close
-        val closeList = klines.toCloseDouble()
+        // Zamieniamy closePrice na listę Double
+        val closeList = candles.toCloseDouble()
+        // Sprawdzamy minimalną liczbę świec
+        if (closeList.size < bbPeriod || closeList.size < rsiPeriod) return signals
 
-        // 2) Oblicz Bollinger i RSI
-        val bb = computeBollingerBands(closeList, bbPeriod, bbDev)
-        val rsiList = computeRsi(closeList, rsiPeriod)
+        val i = closeList.lastIndex
+        if (i < bbPeriod - 1 || i < rsiPeriod) return signals
 
-        // 3) Iteracja po świecach
-        for (i in closeList.indices) {
-            if (i < bbPeriod - 1 || i < rsiPeriod) continue
+        // Bollinger
+        val bb = Indicators.computeBollingerBands(closeList, bbPeriod, bbDev)
+        val lower = bb.lower[i]
+        val upper = bb.upper[i]
 
-            val close = closeList[i]
-            val lower = bb.lower[i]
-            val upper = bb.upper[i]
-            val rsi = rsiList[i]
+        // RSI (zakładamy, że Indicators.computeRsi(...) zwraca listę)
+        val rsiList = Indicators.computeRsi(closeList, rsiPeriod)
+        val rsi = rsiList[i]
 
-            // Warunki
-            if (!lower.isNaN() && close <= lower && rsi < rsiBuyThreshold) {
-                signals.add(Signal(i, SignalType.BUY, "BB lower & RSI<$rsiBuyThreshold"))
-            } else if (!upper.isNaN() && close >= upper && rsi > rsiSellThreshold) {
-                signals.add(Signal(i, SignalType.SELL, "BB upper & RSI>$rsiSellThreshold"))
-            }
+        val price = closeList[i]
+
+        // Warunek BUY
+        if (!lower.isNaN() && price <= lower && rsi < rsiBuyThreshold) {
+            signals.add(
+                StrategySignal(
+                    type = BUY,
+                    price = price,
+                    stopLoss = 0.0,
+                    takeProfit = 0.0,
+                    quantity = 1.0
+                )
+            )
+        }
+        // Warunek SELL
+        else if (!upper.isNaN() && price >= upper && rsi > rsiSellThreshold) {
+            signals.add(
+                StrategySignal(
+                    type = SELL,
+                    price = price,
+                    stopLoss = 0.0,
+                    takeProfit = 0.0,
+                    quantity = 1.0
+                )
+            )
         }
 
         return signals
+    }
+
+    override fun onUpdatePosition(
+        candle: Kline,
+        openPosition: OpenPosition
+    ): List<StrategySignal> {
+        // Na razie brak trailing stop/wyjścia
+        return emptyList()
     }
 }

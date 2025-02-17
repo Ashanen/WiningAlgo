@@ -9,7 +9,7 @@ import model.BollingerBands
 import model.Kline
 import okhttp3.OkHttpClient
 import org.slf4j.LoggerFactory
-import parser.parseCandles
+import parser.CandleParser.parseCandles
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import kotlin.math.abs
@@ -165,7 +165,7 @@ class BollingerBandBreakoutStrategyDynamic(
             put("leverage", leverage)
         }
         val result = futuresClient.market().klines(params)
-        val historicalCandles = parseCandles(result, logger)
+        val historicalCandles = parseCandles(result)
         logger.info("Loaded {} historical candles.", historicalCandles.size)
         candles.clear()
         for (candle in historicalCandles) {
@@ -182,14 +182,14 @@ class BollingerBandBreakoutStrategyDynamic(
             put("limit", "1000")
         }
         val result = futuresClient.market().klines(params)
-        val historicalCandles = parseCandles(result, logger)
+        val historicalCandles = parseCandles(result)
         logger.info("Loaded {} historical candles.", historicalCandles.size)
         candles.clear()
         candles.addAll(historicalCandles)
         logger.info("Subscribing to live data. Current capital: {} USD", capital)
         val callback = WebSocketCallback { response ->
             try {
-                val newCandles = parseCandles("[$response]", logger)
+                val newCandles = parseCandles("[$response]")
                 if (newCandles.isNotEmpty()) {
                     val newCandle = newCandles[0]
                     if (newCandle.isClosed) {

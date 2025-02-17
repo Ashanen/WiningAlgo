@@ -1,8 +1,6 @@
 package model
 
-enum class SignalType {
-    BUY, SELL, NONE
-}
+import strategy.SignalType
 
 data class Signal(
     val index: Int,

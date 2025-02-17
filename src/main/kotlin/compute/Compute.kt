@@ -6,170 +6,149 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
 
-fun computeBollingerBands(
-    closePrices: List<Double>,
-    period: Int = 20,
-    multiplier: Double = 2.0
-): BollingerBands {
-    val middle = mutableListOf<Double>()
-    val upper = mutableListOf<Double>()
-    val lower = mutableListOf<Double>()
+object Indicators {
 
-    for (i in closePrices.indices) {
-        if (i < period - 1) {
-            // Za mało danych do obliczenia
-            middle.add(Double.NaN)
-            upper.add(Double.NaN)
-            lower.add(Double.NaN)
-        } else {
-            val window = closePrices.subList(i - period + 1, i + 1)
-            val avg = window.average()
-            val variance = window.fold(0.0) { acc, x -> acc + (x - avg) * (x - avg) } / period
-            val stdDev = sqrt(variance)
+    fun computeRsi(prices: List<Double>, period: Int = 14): List<Double> {
+        val rsiList = MutableList(prices.size) { Double.NaN }
+        if (prices.size < period) return rsiList
 
-            middle.add(avg)
-            upper.add(avg + multiplier * stdDev)
-            lower.add(avg - multiplier * stdDev)
+        // Różnice między kolejnymi cenami
+        val changes = prices.zipWithNext { prev, curr -> curr - prev }
+
+        // Inicjalizacja sumy zysków/strat
+        var gainSum = 0.0
+        var lossSum = 0.0
+
+        // Pierwszy okres (period-1 zmian)
+        changes.take(period - 1).forEach {
+            if (it > 0) gainSum += it else lossSum -= it
         }
+        var avgGain = gainSum / period
+        var avgLoss = lossSum / period
+
+        // Pierwsze RSI w index = period-1
+        val firstRsi = if (avgLoss == 0.0) 100.0 else {
+            val rs = avgGain / avgLoss
+            100.0 - (100.0 / (1.0 + rs))
+        }
+        rsiList[period - 1] = firstRsi
+
+        // Kolejne wartości RSI
+        for (i in period until prices.size) {
+            val diff = changes[i - 1]
+            val gain = if (diff > 0) diff else 0.0
+            val loss = if (diff < 0) -diff else 0.0
+
+            avgGain = ((avgGain * (period - 1)) + gain) / period
+            avgLoss = ((avgLoss * (period - 1)) + loss) / period
+
+            val rs = if (avgLoss == 0.0) Double.POSITIVE_INFINITY else avgGain / avgLoss
+            val rsi = 100.0 - (100.0 / (1.0 + rs))
+            rsiList[i] = rsi
+        }
+
+        return rsiList
     }
 
-    return BollingerBands(middle, upper, lower)
-}
 
-fun computeRsi(
-    closePrices: List<Double>,
-    period: Int = 14
-): List<Double> {
-    val rsiList = MutableList(closePrices.size) { Double.NaN }
-    if (closePrices.size < period) return rsiList
-
-    // Oblicz zmiany
-    val changes = closePrices.zipWithNext { prev, curr -> curr - prev }
-
-    // Można liczyć prosto w pętli:
-    var gainSum = 0.0
-    var lossSum = 0.0
-
-    // Pierwszy "okres" (od 0 do period-2)
-    changes.take(period - 1).forEach {
-        if (it > 0) gainSum += it else lossSum -= it
-    }
-    var avgGain = gainSum / period
-    var avgLoss = lossSum / period
-
-    // RSI dla index = period-1
-    val firstRsi = if (avgLoss == 0.0) 100.0 else {
-        val rs = avgGain / avgLoss
-        100.0 - (100.0 / (1.0 + rs))
-    }
-    rsiList[period - 1] = firstRsi
-
-    // Dalej
-    for (i in period until closePrices.size) {
-        val change = changes[i - 1]
-        val gain = if (change > 0) change else 0.0
-        val loss = if (change < 0) -change else 0.0
-
-        avgGain = (avgGain * (period - 1) + gain) / period
-        avgLoss = (avgLoss * (period - 1) + loss) / period
-
-        val rs = if (avgLoss == 0.0) Double.POSITIVE_INFINITY else avgGain / avgLoss
-        val rsi = 100.0 - (100.0 / (1.0 + rs))
-        rsiList[i] = rsi
+    fun computeBollingerBands(prices: List<Double>, period: Int, multiplier: Double): BollingerBands {
+        val middle = MutableList(prices.size) { 0.0 }
+        val upper = MutableList(prices.size) { 0.0 }
+        val lower = MutableList(prices.size) { 0.0 }
+        for (i in prices.indices) {
+            if (i < period - 1) {
+                middle[i] = prices.take(i + 1).average()
+                upper[i] = middle[i]
+                lower[i] = middle[i]
+            } else {
+                val window = prices.subList(i - period + 1, i + 1)
+                val sma = window.average()
+                middle[i] = sma
+                val sd = sqrt(window.map { (it - sma)*(it - sma) }.average())
+                upper[i] = sma + multiplier * sd
+                lower[i] = sma - multiplier * sd
+            }
+        }
+        return BollingerBands(middle, upper, lower)
     }
 
-    return rsiList
-}
-
-fun computeSma(values: List<Double>, period: Int): List<Double> {
-    val result = MutableList(values.size) { Double.NaN }
-    for (i in values.indices) {
-        if (i < period - 1) continue
-        val window = values.subList(i - period + 1, i + 1)
-        val avg = window.average()
-        result[i] = avg
-    }
-    return result
-}
-
-/**
- * Kąt: tangens = (Y1 - Y2) / X
- * X = 40 * point (zależy od pary)
- */
-fun computeMaAngle(ma: List<Double>, point: Double = 0.0001): List<Double> {
-    val angleList = MutableList(ma.size) { Double.NaN }
-    for (i in 1 until ma.size) {
-        if (ma[i].isNaN() || ma[i-1].isNaN()) continue
-        val tangens = (ma[i] - ma[i-1]) / (40.0 * point)
-        angleList[i] = Math.toDegrees(tangens) // lub zostaw w radianach
-    }
-    return angleList
-}
-
-/**
- * Oblicza ATR (Average True Range) dla listy klines.
- *
- * @param klines lista świec (zawierających high, low, close).
- * @param period okres ATR (domyślnie 14).
- * @return List<Double> o tej samej wielkości co klines, gdzie:
- *         - index < 1 -> ATR nieobliczalny, bo nie ma poprzedniej świecy => Double.NaN
- *         - index < period => w wersji uproszczonej też Double.NaN (lub partial)
- *         - index >= period-1 => wartości ATR
- */
-fun computeAtr(klines: List<Kline>, period: Int = 14): List<Double> {
-    val size = klines.size
-    val atr = MutableList(size) { Double.NaN }
-    if (size < 2) return atr  // nie da się liczyć TR
-
-    // Konwersje na Double
-    val highs = klines.map { it.highPrice.toDouble() }
-    val lows  = klines.map { it.lowPrice.toDouble() }
-    val closes= klines.map { it.closePrice.toDouble() }
-
-    // 1) Najpierw obliczamy TR (True Range) dla każdej świecy
-    val trList = MutableList(size) { Double.NaN }
-
-    // TR(0) to high(0) - low(0), bo nie mamy poprzedniej świecy
-    trList[0] = highs[0] - lows[0]
-
-    // Dla i >= 1
-    for (i in 1 until size) {
-        val range1 = highs[i] - lows[i]
-        val range2 = abs(highs[i] - closes[i - 1])
-        val range3 = abs(lows[i] - closes[i - 1])
-        val trueRange = max(range1, max(range2, range3))
-        trList[i] = trueRange
+    fun calculateATR(candles: List<Kline>): Double {
+        if (candles.size < 2) return 0.0
+        val trueRanges = mutableListOf<Double>()
+        for (i in 1 until candles.size) {
+            val high = candles[i].highPrice.toDoubleOrNull() ?: continue
+            val low = candles[i].lowPrice.toDoubleOrNull() ?: continue
+            val prevClose = candles[i - 1].closePrice.toDoubleOrNull() ?: continue
+            val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
+            trueRanges.add(tr)
+        }
+        return if (trueRanges.isNotEmpty()) trueRanges.average() else 0.0
     }
 
-    // 2) Obliczamy ATR jako EMA z TR
-    // Dla uproszczenia:
-    //  - index < period -> atr[index] = NaN
-    //  - index = period-1 -> średnia z TR(0..period-1)
-    //  - index > period-1 -> (poprzedni_atr*(period-1) + TR[i]) / period
+    fun computeSma(values: List<Double>, period: Int): List<Double> {
+        val result = MutableList(values.size) { Double.NaN }
+        if (period <= 0) return result
 
-    if (size < period) {
-        // Mamy zbyt mało świec, więc nic
+        for (i in values.indices) {
+            if (i < period - 1) {
+                // za mało danych
+                continue
+            }
+            val window = values.subList(i - period + 1, i + 1)
+            val avg = window.average()
+            result[i] = avg
+        }
+        return result
+    }
+
+    fun computeMaAngle(ma: List<Double>, point: Double = 0.0001): List<Double> {
+        val angleList = MutableList(ma.size) { Double.NaN }
+        for (i in 1 until ma.size) {
+            if (ma[i].isNaN() || ma[i-1].isNaN()) continue
+            // Tangens = (Y1 - Y2) / (40 * point)
+            val tangens = (ma[i] - ma[i-1]) / (40.0 * point)
+            // konwersja na stopnie
+            angleList[i] = Math.toDegrees(tangens)
+        }
+        return angleList
+    }
+
+    fun computeAtr(candles: List<Kline>, period: Int = 14): List<Double> {
+        // Zwracamy ATR dla każdego indeksu
+        val size = candles.size
+        val atr = MutableList(size) { Double.NaN }
+        if (size < 2) return atr
+
+        // Najpierw obliczamy TR (True Range) dla każdej świecy
+        val trList = MutableList(size) { Double.NaN }
+        trList[0] = 0.0 // brak poprzedniej świecy
+
+        for (i in 1 until size) {
+            val high = candles[i].highPrice.toDoubleOrNull() ?: continue
+            val low = candles[i].lowPrice.toDoubleOrNull() ?: continue
+            val prevClose = candles[i - 1].closePrice.toDoubleOrNull() ?: continue
+            val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
+            trList[i] = tr
+        }
+
+        // Teraz liczymy ATR jako EMA(RMA) z TR, period=14
+        // Dla uproszczenia – partial ATR. Możesz doprecyzować
+        var sumTR = 0.0
+        for (i in 0 until period) {
+            if (i >= trList.size || trList[i].isNaN()) return atr
+            sumTR += trList[i]
+        }
+        atr[period - 1] = sumTR / period
+
+        for (i in period until size) {
+            if (trList[i].isNaN() || atr[i - 1].isNaN()) continue
+            val prevAtr = atr[i - 1]
+            // ATR = (prevAtr*(period-1) + TR[i]) / period
+            val newAtr = ((prevAtr * (period - 1)) + trList[i]) / period
+            atr[i] = newAtr
+        }
+
         return atr
     }
 
-    // Obliczamy sumę TR(0..period-1)
-    var sumTR = 0.0
-    for (i in 0 until period) {
-        sumTR += trList[i]
-    }
-    val firstAtr = sumTR / period
-    atr[period - 1] = firstAtr
-
-    // Teraz liczymy kolejne
-    for (i in period until size) {
-        val prevAtr = atr[i - 1]
-        // (prevAtr*(period-1) + TR[i]) / period
-        val newAtr = ((prevAtr * (period - 1)) + trList[i]) / period
-        atr[i] = newAtr
-    }
-
-    return atr
 }
-
-
-
