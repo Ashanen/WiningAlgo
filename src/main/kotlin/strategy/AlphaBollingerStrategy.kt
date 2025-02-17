@@ -1,5 +1,7 @@
 package strategy
 
+import compute.ExtraFilters.averageVolume
+import compute.ExtraFilters.isInTradingHours
 import compute.Indicators
 import model.Kline
 import model.OpenPosition
@@ -20,8 +22,26 @@ class AlphaBollingerStrategy(
     private val maxRiskUsd = 100.0
     private val riskPercentage = 0.05
 
+    // Nowe parametry filtrów
+    private val startHour = 8    // handluj od 08:00 UTC
+    private val endHour = 20     // do 20:00 UTC
+    private val volPeriod = 20   // z ilu świec liczyć średni wolumen
+    private val volMultiplier = 0.8 // aktualny wolumen musi być > 0.8 * avgVol
+
     override fun onNewCandle(candle: Kline, candles: List<Kline>, capital: Double): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
+
+        // 1) Filtr godzinowy
+        if (!isInTradingHours(candle, startHour, endHour)) {
+            return signals
+        }
+
+        // 2) Filtr wolumenu
+        val avgVol = averageVolume(candles, volPeriod)
+        val currentVol = candle.volume.toDoubleOrNull() ?: 0.0
+        if (avgVol.isNaN() || currentVol < avgVol * volMultiplier) {
+            return signals
+        }
         val closePrices = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closePrices.size < bbPeriod) return signals
 

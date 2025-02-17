@@ -12,7 +12,7 @@ data class Kline(
 )
 
 /**
- * Sygnał strategii (BUY, SELL, CLOSE) z parametrami
+ * Sygnał strategii (BUY, SELL, CLOSE) z parametrami.
  */
 data class StrategySignal(
     val type: SignalType,
@@ -27,7 +27,7 @@ enum class SignalType {
 }
 
 /**
- * Informacje o otwartej pozycji
+ * Informacje o otwartej pozycji.
  */
 data class OpenPosition(
     val side: String,          // "BUY" lub "SELL"

@@ -1,6 +1,7 @@
 package strategy
 
 import compute.Indicators
+import convert.toCloseDouble
 import model.Kline
 import model.OpenPosition
 import model.StrategySignal
@@ -9,17 +10,14 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Prosty Mean Reversion:
- * - Liczymy SMA(maPeriod) i ATR(atrPeriod).
- * - Jeśli cena < sma - atr => BUY
- * - Jeśli cena > sma + atr => SELL
- * - Bez trailing stop (lub minimalny).
- */
 class MeanReversionStrategy(
     private val maPeriod: Int = 50,
     private val atrPeriod: Int = 14,
-    private val angleThreshold: Double = 0.5
+    private val angleThreshold: Double = 1.0, // w stopniach, powiększony
+    private val atrFactor: Double = 1.0,      // ile ATR od MA, by zagrać
+    private val riskPercent: Double = 0.02,   // 2% kapitału
+    private val maxRiskUsd: Double = 100.0,
+    private val rrRatio: Double = 2.0         // 2:1
 ) : Strategy {
 
     override val name: String = "MeanReversion"
@@ -31,42 +29,67 @@ class MeanReversionStrategy(
     ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
 
-        val closeList = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
+        if (candles.size < maPeriod || candles.size < atrPeriod) return signals
+
+        val closeList = candles.toCloseDouble()
         val i = closeList.lastIndex
         if (i < maPeriod - 1 || i < atrPeriod) return signals
 
-        // computeSma
-        val maArray = Indicators.computeSma(closeList, maPeriod)
-        val sma = maArray[i]
-        if (sma.isNaN()) return signals
+        // 1) Obliczmy SMA
+        val maArr = Indicators.computeSma(closeList, maPeriod)
+        val maVal = maArr[i]
+        if (maVal.isNaN()) return signals
 
-        // computeAtr (z całych candles lub candles.takeLast(atrPeriod*2))
-        val atr = Indicators.calculateATR(candles.takeLast(atrPeriod + 1))
+        // 2) Obliczmy kąt nachylenia (dla uproszczenia)
+        val angleArr = Indicators.computeMaAngle(maArr, point = 0.1) // np. 0.1 dla BTC
+        val angle = angleArr[i]
+        if (angle.isNaN() || abs(angle) > angleThreshold) {
+            // Jeśli MA ma zbyt duży kąt, nie handlujemy
+            return signals
+        }
+
+        // 3) ATR
+        val atrArr = Indicators.computeAtr(candles, atrPeriod)
+        val atrVal = atrArr[i]
+        if (atrVal.isNaN() || atrVal <= 0.0) return signals
 
         val price = closeList[i]
-        if (atr <= 0) return signals
+        val diff = price - maVal
+        val riskAmount = min(capital * riskPercent, maxRiskUsd)
 
-        // Warunek: MeanReversion - BUY gdy cena < sma - 1*ATR
-        if (price < (sma - atr)) {
+        // Warunek: jeśli cena < MA - (atrFactor * ATR) => BUY
+        if (price < maVal - (atrVal * atrFactor)) {
+            val stopLoss = price - atrVal     // 1x ATR
+            val takeProfit = price + (atrVal * rrRatio) // 2:1
+            val riskPerUnit = price - stopLoss
+            if (riskPerUnit <= 0) return signals
+            val qty = riskAmount / riskPerUnit
+
             signals.add(
                 StrategySignal(
-                    type = SignalType.BUY,
-                    price = price,
-                    stopLoss = price - atr,         // przykładowy stopLoss
-                    takeProfit = price + atr * 2.0, // przykładowy TP
-                    quantity = computeQuantity(capital, atr, price)
+                    SignalType.BUY,
+                    price,
+                    stopLoss,
+                    takeProfit,
+                    qty
                 )
             )
         }
-        // SELL gdy cena > sma + 1*ATR
-        else if (price > (sma + atr)) {
+        // Warunek: jeśli cena > MA + (atrFactor * ATR) => SELL
+        else if (price > maVal + (atrVal * atrFactor)) {
+            val stopLoss = price + atrVal
+            val takeProfit = price - (atrVal * rrRatio)
+            val riskPerUnit = stopLoss - price
+            if (riskPerUnit <= 0) return signals
+            val qty = riskAmount / riskPerUnit
+
             signals.add(
                 StrategySignal(
-                    type = SignalType.SELL,
-                    price = price,
-                    stopLoss = price + atr,
-                    takeProfit = price - atr * 2.0,
-                    quantity = computeQuantity(capital, atr, price)
+                    SignalType.SELL,
+                    price,
+                    stopLoss,
+                    takeProfit,
+                    qty
                 )
             )
         }
@@ -81,18 +104,29 @@ class MeanReversionStrategy(
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
 
-        // Prosty exit: trailing minimalny
-        val atr = Indicators.calculateATR(listOf(candle)).coerceAtLeast(1.0)
-
+        // trailing offset, np. 0.5 ATR (opcjonalnie)
+        // lub proste sprawdzenie SL/TP
         when (openPosition.side) {
             "BUY" -> {
                 if (price > openPosition.maxFavorable) {
                     openPosition.maxFavorable = price
                 }
-                val trailingStop = openPosition.maxFavorable - atr
-                if (price <= trailingStop || price >= openPosition.takeProfit || price <= openPosition.stopLoss) {
+                // trailing
+                val offset = (openPosition.maxFavorable - openPosition.entryPrice) * 0.5
+                val trailingStop = openPosition.maxFavorable - offset
+
+                if (price <= trailingStop ||
+                    price >= openPosition.takeProfit ||
+                    price <= openPosition.stopLoss
+                ) {
                     signals.add(
-                        StrategySignal(SignalType.CLOSE, price, 0.0, 0.0, openPosition.quantity)
+                        StrategySignal(
+                            SignalType.CLOSE,
+                            price,
+                            0.0,
+                            0.0,
+                            openPosition.quantity
+                        )
                     )
                 }
             }
@@ -100,21 +134,26 @@ class MeanReversionStrategy(
                 if (price < openPosition.minFavorable) {
                     openPosition.minFavorable = price
                 }
-                val trailingStop = openPosition.minFavorable + atr
-                if (price >= trailingStop || price <= openPosition.takeProfit || price >= openPosition.stopLoss) {
+                val offset = (openPosition.entryPrice - openPosition.minFavorable) * 0.5
+                val trailingStop = openPosition.minFavorable + offset
+
+                if (price >= trailingStop ||
+                    price <= openPosition.takeProfit ||
+                    price >= openPosition.stopLoss
+                ) {
                     signals.add(
-                        StrategySignal(SignalType.CLOSE, price, 0.0, 0.0, openPosition.quantity)
+                        StrategySignal(
+                            SignalType.CLOSE,
+                            price,
+                            0.0,
+                            0.0,
+                            openPosition.quantity
+                        )
                     )
                 }
             }
         }
-        return signals
-    }
 
-    private fun computeQuantity(capital: Double, atr: Double, price: Double): Double {
-        val riskPercent = 0.02
-        val riskUsd = capital * riskPercent
-        val riskPerUnit = max(atr, price * 0.01)
-        return riskUsd / riskPerUnit
+        return signals
     }
 }

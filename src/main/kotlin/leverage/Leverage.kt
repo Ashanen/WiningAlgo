@@ -1,6 +1,8 @@
 package leverage
 
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
+import model.Kline
+import parser.CandleParser
 import java.util.LinkedHashMap
 
 fun setLeverage(futuresClient: UMFuturesClientImpl, symbol: String, leverage: Int): Boolean {
@@ -17,4 +19,19 @@ fun setLeverage(futuresClient: UMFuturesClientImpl, symbol: String, leverage: In
         println("Error changing leverage: ${e.message}")
         false
     }
+}
+
+fun fetchHistoricalCandles(
+    futuresClient: UMFuturesClientImpl,
+    symbol: String,
+    interval: String,
+    limit: Int = 1000
+): List<Kline> {
+    val params = linkedMapOf<String, Any>(
+        "symbol" to symbol,
+        "interval" to interval,
+        "limit" to limit
+    )
+    val result = futuresClient.market().klines(params)
+    return CandleParser.parseCandles(result)
 }
