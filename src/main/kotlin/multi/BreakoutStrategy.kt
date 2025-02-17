@@ -1,13 +1,13 @@
-package strategy
+package multi
 
 import convert.toCloseDouble
 import convert.toHighDouble
 import convert.toLowDouble
 import model.Kline
 import model.OpenPosition
-import strategy.SignalType.*
-import kotlin.math.min
-import kotlin.math.max
+import model.SignalType
+import model.StrategySignal
+import strategy.Strategy
 
 class BreakoutStrategy(
     private val lookback: Int = 20
@@ -41,7 +41,7 @@ class BreakoutStrategy(
         if (currentHigh > windowHigh) {
             signals.add(
                 StrategySignal(
-                    type = BUY,
+                    type = SignalType.BUY,
                     price = currentClose,
                     stopLoss = 0.0,
                     takeProfit = 0.0,
@@ -53,7 +53,7 @@ class BreakoutStrategy(
         else if (currentLow < windowLow) {
             signals.add(
                 StrategySignal(
-                    type = SELL,
+                    type = SignalType.SELL,
                     price = currentClose,
                     stopLoss = 0.0,
                     takeProfit = 0.0,

@@ -1,12 +1,12 @@
-package strategy
+package multi
 
 import compute.Indicators
 import convert.toCloseDouble
 import model.Kline
 import model.OpenPosition
-import strategy.SignalType.*
-import kotlin.math.min
-import kotlin.math.max
+import model.SignalType
+import model.StrategySignal
+import strategy.Strategy
 
 class BollingerScalpingStrategy(
     private val bbPeriod: Int = 20,
@@ -48,7 +48,7 @@ class BollingerScalpingStrategy(
         if (!lower.isNaN() && price <= lower && rsi < rsiBuyThreshold) {
             signals.add(
                 StrategySignal(
-                    type = BUY,
+                    type = SignalType.BUY,
                     price = price,
                     stopLoss = 0.0,
                     takeProfit = 0.0,
@@ -60,7 +60,7 @@ class BollingerScalpingStrategy(
         else if (!upper.isNaN() && price >= upper && rsi > rsiSellThreshold) {
             signals.add(
                 StrategySignal(
-                    type = SELL,
+                    type = SignalType.SELL,
                     price = price,
                     stopLoss = 0.0,
                     takeProfit = 0.0,

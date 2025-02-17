@@ -6,9 +6,9 @@ import compute.Indicators.computeSma
 import convert.toCloseDouble
 import model.Kline
 import model.OpenPosition
-import strategy.SignalType.*
+import model.SignalType
+import model.StrategySignal
 import strategy.Strategy
-import strategy.StrategySignal
 import kotlin.math.abs
 
 class MeanReversionStrategy(
@@ -50,7 +50,7 @@ class MeanReversionStrategy(
                 // Cena sporo poniżej MA => spodziewamy się ruchu w górę => BUY
                 signals.add(
                     StrategySignal(
-                        type = BUY,
+                        type = SignalType.BUY,
                         price = price,
                         stopLoss = 0.0,
                         takeProfit = 0.0,
@@ -61,7 +61,7 @@ class MeanReversionStrategy(
                 // Cena sporo powyżej MA => SELL
                 signals.add(
                     StrategySignal(
-                        type = SELL,
+                        type = SignalType.SELL,
                         price = price,
                         stopLoss = 0.0,
                         takeProfit = 0.0,

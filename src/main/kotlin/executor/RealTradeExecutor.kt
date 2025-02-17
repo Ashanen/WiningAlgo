@@ -39,7 +39,6 @@ class RealTradeExecutor(
             put("symbol", "BTCUSDT")
             put("side", side)
             put("type", "MARKET")
-            put("leverage", 3) // 3x leverage
             put("quantity", formattedQuantity)
             put("timestamp", adjustedTimestamp)
             put("recvWindow", 6000)

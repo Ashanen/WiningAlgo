@@ -3,9 +3,9 @@
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
 import com.binance.connector.futures.client.impl.UMWebsocketClientImpl
 import com.binance.connector.futures.client.utils.WebSocketCallback
+import compute.BollingerBands
 import executor.TradeExecutor
 import kotlinx.serialization.json.*
-import model.BollingerBands
 import model.Kline
 import okhttp3.OkHttpClient
 import org.slf4j.LoggerFactory
