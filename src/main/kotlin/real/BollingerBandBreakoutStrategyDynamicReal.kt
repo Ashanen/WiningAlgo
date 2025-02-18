@@ -232,7 +232,7 @@ class BollingerBandBreakoutStrategyDynamic(
         } else {
             if (price > upperBand && rsi > 50) {
                 val entryPrice = price
-                val riskAmount = min(capital * riskPercentage, 100.0)
+                val riskAmount = max(capital * riskPercentage, 100.0)
                 val atr = calculateATR(candles.takeLast(lookbackPeriod))
                 val riskPerUnit = max(atr, entryPrice * minRiskPerUnitMultiplier)
                 if (riskPerUnit <= 0) return

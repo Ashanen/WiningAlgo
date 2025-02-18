@@ -34,4 +34,22 @@ object ExtraFilters {
         val volumes = sub.mapNotNull { it.volume.toDoubleOrNull() }
         return if (volumes.isEmpty()) Double.NaN else volumes.average()
     }
+
+    fun computeTradeQuantity(
+        closePrice: Double?,
+        baseRiskUsd: Double = 200.0,
+        maxLeverage: Double = 3.0
+    ): Double {
+        // Gdy cena jest null lub <= 0, zwracamy 0
+        if (closePrice == null || closePrice <= 0.0) return 0.0
+
+        // Wyliczamy nominal w USD (np. 200 USD * 3 = 600 USD)
+        val notionalUsd = baseRiskUsd * maxLeverage
+
+        // Ilość = (nominal w USD) / (aktualna cena)
+        // Np. 600 USD / 96000 USDT/BTC = ~0.00625 BTC
+        val qty = notionalUsd / closePrice
+
+        return qty
+    }
 }

@@ -3,18 +3,20 @@ package strategy
 import compute.Indicators
 import model.Kline
 import model.OpenPosition
-import model.SignalType
 import model.StrategySignal
+import model.SignalType
+import kotlin.math.min
 
 /**
- * Prosty Bollinger + RSI z minimalnym trailing stopem
+ * Przykładowa strategia Bollinger Scalp + Trend:
+ * - Liczymy Bollinger (bbPeriod, bbDev).
+ * - BUY, gdy close < lowerBand i np. jest trend UP (lub RSI < X)
+ * - SELL, gdy close > upperBand i trend DOWN (lub RSI > Y)
+ * - Tu: prosty "trend" to np. sprawdzamy, czy close > middle
  */
 class BollingerScalpTrendStrategy(
     private val bbPeriod: Int = 20,
-    private val bbDev: Double = 2.0,
-    private val rsiPeriod: Int = 14,
-    private val rsiBuyThreshold: Double = 30.0,
-    private val rsiSellThreshold: Double = 70.0
+    private val bbDev: Double = 2.0
 ) : Strategy {
 
     override val name: String = "BollingerScalpTrendStrategy"
@@ -25,7 +27,6 @@ class BollingerScalpTrendStrategy(
         capital: Double
     ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
-        if (candles.size < bbPeriod) return signals
 
         val closeList = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closeList.size < bbPeriod) return signals
@@ -34,19 +35,26 @@ class BollingerScalpTrendStrategy(
         val i = closeList.lastIndex
         if (i < bbPeriod - 1) return signals
 
+        val close = closeList[i]
         val lower = bb.lower[i]
         val upper = bb.upper[i]
-        val close = closeList[i]
+        val middle = bb.middle[i]
 
-        val rsiArr = Indicators.computeRsi(closeList, rsiPeriod)
-        val rsi = rsiArr.lastOrNull() ?: 50.0
+        // Prosty "trend" – sprawdzamy, czy close powyżej middle => UP, poniżej => DOWN
+        val isUpTrend = (close > middle)
 
-        // Warunki: close < BB-lower + RSI < 30 => BUY
-        //          close > BB-upper + RSI > 70 => SELL
-        if (close <= lower && rsi < rsiBuyThreshold) {
+        // BUY warunek: close < lowerBand && isUpTrend
+        if (close < lower && isUpTrend) {
             val stopLoss = close - (close * 0.005)
             val takeProfit = close + (close * 0.01)
-            val qty = (capital * 0.02) / (close * 0.005)
+
+            // Przykładowe obliczenie rawQty:
+            val rawQty = (capital * 0.02) / (close * 0.005)
+
+            // Klampujemy do 0.002
+            val maxQty = 0.002
+            val qty = min(rawQty, maxQty)
+
             signals.add(
                 StrategySignal(
                     SignalType.BUY,
@@ -56,10 +64,18 @@ class BollingerScalpTrendStrategy(
                     qty
                 )
             )
-        } else if (close >= upper && rsi > rsiSellThreshold) {
+        }
+        // SELL warunek: close > upperBand && !isUpTrend
+        else if (close > upper && !isUpTrend) {
             val stopLoss = close + (close * 0.005)
             val takeProfit = close - (close * 0.01)
-            val qty = (capital * 0.02) / (close * 0.005)
+
+            val rawQty = (capital * 0.02) / (close * 0.005)
+
+            // Klamp do 0.002
+            val maxQty = 0.002
+            val qty = min(rawQty, maxQty)
+
             signals.add(
                 StrategySignal(
                     SignalType.SELL,
@@ -81,6 +97,7 @@ class BollingerScalpTrendStrategy(
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
 
+        // Minimal trailing offset
         val offset = price * 0.003
         when (openPosition.side) {
             "BUY" -> {
@@ -88,8 +105,7 @@ class BollingerScalpTrendStrategy(
                     openPosition.maxFavorable = price
                 }
                 val trailingStop = openPosition.maxFavorable - offset
-                if (
-                    price <= trailingStop ||
+                if (price <= trailingStop ||
                     price >= openPosition.takeProfit ||
                     price <= openPosition.stopLoss
                 ) {
@@ -109,8 +125,7 @@ class BollingerScalpTrendStrategy(
                     openPosition.minFavorable = price
                 }
                 val trailingStop = openPosition.minFavorable + offset
-                if (
-                    price >= trailingStop ||
+                if (price >= trailingStop ||
                     price <= openPosition.takeProfit ||
                     price >= openPosition.stopLoss
                 ) {
