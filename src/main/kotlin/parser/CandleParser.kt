@@ -1,71 +1,81 @@
 package parser
 
-import kotlinx.serialization.json.*
 import model.Kline
-import org.slf4j.LoggerFactory
-
+import org.json.JSONObject
+import org.json.JSONArray
 
 object CandleParser {
-    private val logger = LoggerFactory.getLogger(CandleParser::class.java)
-    private val json = Json { ignoreUnknownKeys = true }
 
-    fun parseCandles(result: String): List<Kline> {
+    /**
+     * Existing method: parse an entire JSON array of klines from the REST API.
+     */
+    fun parseCandles(json: String): List<Kline> {
+        val arr = JSONArray(json)
         val list = mutableListOf<Kline>()
-        try {
-            val jsonElement = json.parseToJsonElement(result)
-            when {
-                jsonElement is JsonArray &&
-                        jsonElement.isNotEmpty() &&
-                        jsonElement[0] is JsonArray -> {
-                    // array of arrays
-                    for (element in jsonElement) {
-                        if (element is JsonArray) {
-                            val openTime = element[0].jsonPrimitive.long
-                            val openPrice = element[1].jsonPrimitive.content
-                            val highPrice = element[2].jsonPrimitive.content
-                            val lowPrice = element[3].jsonPrimitive.content
-                            val closePrice = element[4].jsonPrimitive.content
-                            val volume = element[5].jsonPrimitive.content
-                            val closeTime = element[6].jsonPrimitive.long
-                            val isClosed = true
-                            list.add(Kline(openTime, closeTime, openPrice, highPrice, lowPrice, closePrice, volume, isClosed))
-                        }
-                    }
-                }
-                jsonElement is JsonObject && jsonElement.containsKey("k") -> {
-                    // single object with "k"
-                    val klineObj = jsonElement["k"]!!.jsonObject
-                    val openTime = klineObj["t"]!!.jsonPrimitive.long
-                    val closeTime = klineObj["T"]!!.jsonPrimitive.long
-                    val openPrice = klineObj["o"]!!.jsonPrimitive.content
-                    val highPrice = klineObj["h"]!!.jsonPrimitive.content
-                    val lowPrice = klineObj["l"]!!.jsonPrimitive.content
-                    val closePrice = klineObj["c"]!!.jsonPrimitive.content
-                    val volume = klineObj["v"]!!.jsonPrimitive.content
-                    val isClosed = klineObj["x"]!!.jsonPrimitive.boolean
-                    list.add(Kline(openTime, closeTime, openPrice, highPrice, lowPrice, closePrice, volume, isClosed))
-                }
-                jsonElement is JsonArray &&
-                        jsonElement.isNotEmpty() &&
-                        jsonElement[0].jsonObject.containsKey("k") -> {
-                    // array of objects each with "k"
-                    for (element in jsonElement) {
-                        val klineObj = element.jsonObject["k"]!!.jsonObject
-                        val openTime = klineObj["t"]!!.jsonPrimitive.long
-                        val closeTime = klineObj["T"]!!.jsonPrimitive.long
-                        val openPrice = klineObj["o"]!!.jsonPrimitive.content
-                        val highPrice = klineObj["h"]!!.jsonPrimitive.content
-                        val lowPrice = klineObj["l"]!!.jsonPrimitive.content
-                        val closePrice = klineObj["c"]!!.jsonPrimitive.content
-                        val volume = klineObj["v"]!!.jsonPrimitive.content
-                        val isClosed = klineObj["x"]!!.jsonPrimitive.boolean
-                        list.add(Kline(openTime, closeTime, openPrice, highPrice, lowPrice, closePrice, volume, isClosed))
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logger.error("Error parsing candles: {}", e.message)
+        for (i in 0 until arr.length()) {
+            val item = arr.getJSONArray(i)
+            val kline = jsonArrayToKline(item)
+            list.add(kline)
         }
         return list
+    }
+
+    /**
+     * Helper that converts a single JSON array item -> Kline.
+     * (Already used by parseCandles)
+     */
+    private fun jsonArrayToKline(item: JSONArray): Kline {
+        val openTime = item.getLong(0)
+        val openPrice = item.getString(1)
+        val highPrice = item.getString(2)
+        val lowPrice = item.getString(3)
+        val closePrice = item.getString(4)
+        val volume = item.getString(5)
+        val closeTime = item.getLong(6)
+        // ...
+        // last boolean for isClosed can be deduce from openTime/closeTime or you can do:
+        val isClosed = true // Because from REST, these are fully closed klines
+
+        return Kline(
+            openTime = openTime,
+            closeTime = closeTime,
+            openPrice = openPrice,
+            highPrice = highPrice,
+            lowPrice = lowPrice,
+            closePrice = closePrice,
+            volume = volume,
+            isClosed = isClosed
+        )
+    }
+
+    /**
+     * Minimal addition: parse a single 'k' object from the WebSocket JSON event.
+     * This method reuses the same fields for continuity with parseCandles(...).
+     */
+    fun parseSingleCandleFromWs(json: String): Kline? {
+        val root = JSONObject(json)
+        if (!root.has("k")) return null
+
+        val kObj = root.getJSONObject("k")
+
+        val openTime = kObj.getLong("t")
+        val closeTime = kObj.getLong("T")
+        val openPrice = kObj.getString("o")
+        val highPrice = kObj.getString("h")
+        val lowPrice = kObj.getString("l")
+        val closePrice = kObj.getString("c")
+        val volume = kObj.getString("v")
+        val isClosed = kObj.getBoolean("x")  // 'x' indicates if kline is closed
+
+        return Kline(
+            openTime = openTime,
+            closeTime = closeTime,
+            openPrice = openPrice,
+            highPrice = highPrice,
+            lowPrice = lowPrice,
+            closePrice = closePrice,
+            volume = volume,
+            isClosed = isClosed
+        )
     }
 }

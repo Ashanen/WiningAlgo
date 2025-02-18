@@ -35,3 +35,24 @@ fun fetchHistoricalCandles(
     val result = futuresClient.market().klines(params)
     return CandleParser.parseCandles(result)
 }
+
+fun getLatestCandle(
+    futuresClient: UMFuturesClientImpl,
+    symbol: String,
+    interval: String
+): Kline? {
+    val params = linkedMapOf<String, Any>(
+        "symbol" to symbol,
+        "interval" to interval,
+        "limit" to 1
+    )
+    return try {
+        val result = futuresClient.market().klines(params)
+        val candles = parser.CandleParser.parseCandles(result)
+        if (candles.isNotEmpty()) candles.last() else null
+    } catch (e: Exception) {
+        println("Error fetching latest candle: ${e.message}")
+        null
+    }
+}
+

@@ -5,18 +5,20 @@ import model.Kline
 import model.OpenPosition
 import model.StrategySignal
 import model.SignalType
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
- * Przykładowa strategia RSI Overbought/Oversold + Trend:
- * - Obliczamy RSI
- * - BUY, gdy RSI < rsiBuyThreshold (i ewentualnie trend jest UP)
- * - SELL, gdy RSI > rsiSellThreshold (i ewentualnie trend jest DOWN)
+ * RSI Overbought/Oversold with minimal risk-based sizing + leverage clamp.
  */
 class RSIOverboughtOversoldTrendStrategy(
     private val rsiPeriod: Int = 14,
-    private val rsiBuyThreshold: Double = 30.0,
-    private val rsiSellThreshold: Double = 70.0
+    private val buyThreshold: Double = 30.0,
+    private val sellThreshold: Double = 70.0,
+
+    private val riskPercent: Double = 0.02, // 2% of capital
+    private val leverage: Double = 5.0,     // clamp notional
+    private val rrRatio: Double = 2.0       // 1:2 risk:reward
 ) : Strategy {
 
     override val name: String = "RSIOverboughtOversoldTrendStrategy"
@@ -28,61 +30,57 @@ class RSIOverboughtOversoldTrendStrategy(
     ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
 
+        if (candles.size < rsiPeriod) return signals
         val closeList = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
-        if (closeList.isEmpty()) return signals
-
-        val close = closeList.lastOrNull() ?: return signals
-
-        // Oblicz RSI
         val rsiArr = Indicators.computeRsi(closeList, rsiPeriod)
-        val rsi = rsiArr.lastOrNull() ?: 50.0
+        val rsi = rsiArr.lastOrNull() ?: return signals
+        val close = closeList.last()
 
-        // (opcjonalnie) Jakiś prosty trend check:
-        // np. porównaj close z prostą średnią
-        // val smaArr = Indicators.computeSma(closeList, 50)
-        // val sma = smaArr.lastOrNull() ?: close
-        // val isUpTrend = (close > sma)
+        // RSI < buyThreshold => BUY
+        if (rsi < buyThreshold) {
+            val stopLoss = close * 0.99
+            val takeProfit = close * (1.0 + 0.01 * rrRatio)
 
-        // BUY, jeśli RSI < rsiBuyThreshold
-        if (rsi < rsiBuyThreshold) {
-            val stopLoss = close - (close * 0.005)
-            val takeProfit = close + (close * 0.01)
+            val riskUsd = capital * riskPercent
+            val riskPerCoin = abs(close - stopLoss)
+            val rawQty = riskUsd / riskPerCoin
+            val maxQtyByLeverage = (capital * leverage) / close
+            val finalQty = min(rawQty, maxQtyByLeverage)
 
-            // Przykładowe obliczenie rawQty:
-            val rawQty = (capital * 0.02) / (close * 0.005)
-
-            // Klamp do 0.002
-            val maxQty = 0.002
-            val qty = min(rawQty, maxQty)
-
-            signals.add(
-                StrategySignal(
-                    SignalType.BUY,
-                    close,
-                    stopLoss,
-                    takeProfit,
-                    qty
+            if (finalQty > 0.0) {
+                signals.add(
+                    StrategySignal(
+                        SignalType.BUY,
+                        close,
+                        stopLoss,
+                        takeProfit,
+                        finalQty
+                    )
                 )
-            )
+            }
         }
-        // SELL, jeśli RSI > rsiSellThreshold
-        else if (rsi > rsiSellThreshold) {
-            val stopLoss = close + (close * 0.005)
-            val takeProfit = close - (close * 0.01)
+        // RSI > sellThreshold => SELL
+        else if (rsi > sellThreshold) {
+            val stopLoss = close * 1.01
+            val takeProfit = close * (1.0 - 0.01 * rrRatio)
 
-            val rawQty = (capital * 0.02) / (close * 0.005)
-            val maxQty = 0.002
-            val qty = min(rawQty, maxQty)
+            val riskUsd = capital * riskPercent
+            val riskPerCoin = abs(stopLoss - close)
+            val rawQty = riskUsd / riskPerCoin
+            val maxQtyByLeverage = (capital * leverage) / close
+            val finalQty = min(rawQty, maxQtyByLeverage)
 
-            signals.add(
-                StrategySignal(
-                    SignalType.SELL,
-                    close,
-                    stopLoss,
-                    takeProfit,
-                    qty
+            if (finalQty > 0.0) {
+                signals.add(
+                    StrategySignal(
+                        SignalType.SELL,
+                        close,
+                        stopLoss,
+                        takeProfit,
+                        finalQty
+                    )
                 )
-            )
+            }
         }
 
         return signals
@@ -95,7 +93,7 @@ class RSIOverboughtOversoldTrendStrategy(
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
 
-        // Minimal trailing offset
+        // minimal trailing approach
         val offset = price * 0.003
         when (openPosition.side) {
             "BUY" -> {
