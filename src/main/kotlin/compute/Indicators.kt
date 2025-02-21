@@ -4,7 +4,6 @@ import model.Kline
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sqrt
-import kotlin.Double
 import kotlin.Double.Companion.NaN
 
 data class BollingerBands(
@@ -15,7 +14,6 @@ data class BollingerBands(
 
 object Indicators {
 
-    // 1) RSI
     fun computeRsi(prices: List<Double>, period: Int = 14): List<Double> {
         val rsiList = MutableList(prices.size) { NaN }
         if (prices.size < period) return rsiList
@@ -24,7 +22,6 @@ object Indicators {
         var gainSum = 0.0
         var lossSum = 0.0
 
-        // Pierwszy okres
         changes.take(period - 1).forEach {
             if (it > 0) gainSum += it else lossSum -= it
         }
@@ -37,7 +34,6 @@ object Indicators {
         }
         rsiList[period - 1] = firstRsi
 
-        // Kolejne wartości
         for (i in period until prices.size) {
             val diff = changes[i - 1]
             val gain = if (diff > 0) diff else 0.0
@@ -53,7 +49,6 @@ object Indicators {
         return rsiList
     }
 
-    // 2) Bollinger
     fun computeBollingerBands(prices: List<Double>, period: Int, multiplier: Double): BollingerBands {
         val middle = MutableList(prices.size) { 0.0 }
         val upper = MutableList(prices.size) { 0.0 }
@@ -61,8 +56,7 @@ object Indicators {
 
         for (i in prices.indices) {
             if (i < period - 1) {
-                // niewystarczająca ilość danych
-                val avg = prices.take(i+1).average()
+                val avg = prices.take(i + 1).average()
                 middle[i] = avg
                 upper[i] = avg
                 lower[i] = avg
@@ -70,7 +64,7 @@ object Indicators {
                 val window = prices.subList(i - period + 1, i + 1)
                 val sma = window.average()
                 middle[i] = sma
-                val sd = sqrt(window.map { (it - sma)*(it - sma) }.average())
+                val sd = sqrt(window.map { (it - sma) * (it - sma) }.average())
                 upper[i] = sma + multiplier * sd
                 lower[i] = sma - multiplier * sd
             }
@@ -78,7 +72,6 @@ object Indicators {
         return BollingerBands(middle, upper, lower)
     }
 
-    // 3) ATR - pojedyncza wartość
     fun calculateATR(candles: List<Kline>): Double {
         if (candles.size < 2) return 0.0
         val trueRanges = mutableListOf<Double>()
@@ -92,7 +85,6 @@ object Indicators {
         return if (trueRanges.isNotEmpty()) trueRanges.average() else 0.0
     }
 
-    // 4) computeSma
     fun computeSma(values: List<Double>, period: Int): List<Double> {
         val result = MutableList(values.size) { NaN }
         if (period <= 0) return result
@@ -105,7 +97,6 @@ object Indicators {
         return result
     }
 
-    // 5) computeMaAngle
     fun computeMaAngle(ma: List<Double>, point: Double = 0.0001): List<Double> {
         val angleList = MutableList(ma.size) { NaN }
         for (i in 1 until ma.size) {
@@ -116,7 +107,6 @@ object Indicators {
         return angleList
     }
 
-    // 6) computeAtr - lista
     fun computeAtr(candles: List<Kline>, period: Int = 14): List<Double> {
         val size = candles.size
         val atr = MutableList(size) { NaN }
@@ -133,7 +123,6 @@ object Indicators {
         }
         if (period > size) return atr
 
-        // Inicjalizacja
         var sumTR = 0.0
         for (i in 0 until period) {
             if (trList[i].isNaN()) return atr
@@ -141,7 +130,6 @@ object Indicators {
         }
         atr[period - 1] = sumTR / period
 
-        // ATR = RMA( TR )
         for (i in period until size) {
             if (trList[i].isNaN() || atr[i - 1].isNaN()) continue
             val prevAtr = atr[i - 1]
@@ -150,12 +138,12 @@ object Indicators {
         }
         return atr
     }
+
     fun computeEma(prices: List<Double>, period: Int): List<Double> {
         val result = MutableList(prices.size) { Double.NaN }
         if (prices.isEmpty() || period <= 0) return result
 
         val multiplier = 2.0 / (period + 1)
-        // Pierwszą wartość EMA możemy zainicjalizować np. pierwszą ceną (lub SMA z początkowego okna).
         var prevEma = prices.first()
         result[0] = prevEma
 
@@ -167,5 +155,4 @@ object Indicators {
         }
         return result
     }
-
 }

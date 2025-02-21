@@ -3,10 +3,9 @@ package strategy
 import compute.Indicators
 import model.Kline
 import model.OpenPosition
-import model.StrategySignal
 import model.SignalType
+import model.StrategySignal
 import kotlin.math.min
-import kotlin.math.max
 
 class BollingerScalpingStrategy(
     private val bbPeriod: Int = 20,
@@ -14,7 +13,7 @@ class BollingerScalpingStrategy(
     private val rsiPeriod: Int = 14,
     private val rsiBuyThreshold: Double = 30.0,
     private val rsiSellThreshold: Double = 70.0,
-    private val riskPercent: Double = 0.02,   // 2% kapitału
+    private val riskPercent: Double = 0.02,   // np. 2% kapitału
     private val maxRiskUsd: Double = 100.0,   // max 100 USD na trade
     private val slPct: Double = 0.015,        // 1.5% stop-loss
     private val tpPct: Double = 0.03,         // 3.0% take-profit
@@ -25,12 +24,12 @@ class BollingerScalpingStrategy(
 
     override fun onNewCandle(
         candle: Kline,
-        candles: List<Kline>,
+        candlesSoFar: List<Kline>,
         capital: Double
     ): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
 
-        val closeList = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
+        val closeList = candlesSoFar.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closeList.size < bbPeriod) return signals
 
         val bb = Indicators.computeBollingerBands(closeList, bbPeriod, bbDev)
@@ -44,13 +43,13 @@ class BollingerScalpingStrategy(
         val upper = bb.upper[i]
         val rsi = rsiArr[i]
 
-        // Ryzyko
+        // Wyliczamy kwotę ryzyka
         val riskAmount = min(capital * riskPercent, maxRiskUsd)
 
-        // 1) Sygnał BUY
+        // BUY sygnał
         if (close <= lower && rsi < rsiBuyThreshold) {
-            val stopLoss = close * (1.0 - slPct)      // np. 1.5% poniżej ceny
-            val takeProfit = close * (1.0 + tpPct)    // np. 3.0% powyżej ceny
+            val stopLoss = close * (1.0 - slPct)
+            val takeProfit = close * (1.0 + tpPct)
             val riskPerUnit = close - stopLoss
             if (riskPerUnit <= 0.0) return signals
             val quantity = riskAmount / riskPerUnit
@@ -65,7 +64,7 @@ class BollingerScalpingStrategy(
                 )
             )
         }
-        // 2) Sygnał SELL
+        // SELL sygnał
         else if (close >= upper && rsi > rsiSellThreshold) {
             val stopLoss = close * (1.0 + slPct)
             val takeProfit = close * (1.0 - tpPct)
@@ -94,7 +93,6 @@ class BollingerScalpingStrategy(
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
 
-        // trailing offset
         val offset = price * trailingOffsetPct
 
         when (openPosition.side) {
@@ -105,17 +103,11 @@ class BollingerScalpingStrategy(
                 val trailingStop = openPosition.maxFavorable - offset
 
                 if (price <= trailingStop ||
-                    price >= openPosition.takeProfit ||
-                    price <= openPosition.stopLoss
+                    (openPosition.takeProfit != null && price >= openPosition.takeProfit) ||
+                    (openPosition.stopLoss != null && price <= openPosition.stopLoss)
                 ) {
                     signals.add(
-                        StrategySignal(
-                            SignalType.CLOSE,
-                            price,
-                            0.0,
-                            0.0,
-                            openPosition.quantity
-                        )
+                        StrategySignal(SignalType.CLOSE, price)
                     )
                 }
             }
@@ -126,17 +118,11 @@ class BollingerScalpingStrategy(
                 val trailingStop = openPosition.minFavorable + offset
 
                 if (price >= trailingStop ||
-                    price <= openPosition.takeProfit ||
-                    price >= openPosition.stopLoss
+                    (openPosition.takeProfit != null && price <= openPosition.takeProfit) ||
+                    (openPosition.stopLoss != null && price >= openPosition.stopLoss)
                 ) {
                     signals.add(
-                        StrategySignal(
-                            SignalType.CLOSE,
-                            price,
-                            0.0,
-                            0.0,
-                            openPosition.quantity
-                        )
+                        StrategySignal(SignalType.CLOSE, price)
                     )
                 }
             }

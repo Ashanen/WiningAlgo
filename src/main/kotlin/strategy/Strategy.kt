@@ -9,7 +9,7 @@ interface Strategy {
 
     fun onNewCandle(
         candle: Kline,
-        candles: List<Kline>,
+        candlesSoFar: List<Kline>,
         capital: Double
     ): List<StrategySignal>
 

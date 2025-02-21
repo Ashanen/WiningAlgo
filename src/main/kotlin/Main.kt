@@ -1,15 +1,12 @@
-import backtest.backtestMultipleStrategiesOnePosition
+import backtest.BacktestRunner
 
-import live.LiveTradingManager
 
 fun main() {
-    val isBacktest = true  // Toggle
-
+    val isBacktest = true
     if (isBacktest) {
-        backtestMultipleStrategiesOnePosition()
+        BacktestRunner.backtestMultipleStrategiesOnePosition(rangeYears = 2)
     } else {
-        val manager = LiveTradingManager()
-        manager.runLive()
+
     }
 }
 
