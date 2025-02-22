@@ -9,19 +9,15 @@ import historical.HistoricalDataManagerYearly
 import model.Kline
 import org.slf4j.LoggerFactory
 import strategy.BollingerScalpingStrategy
-import strategy.Strategy
+import strategy.MovingAverageCrossStrategy
 
 object BacktestRunner {
     private val logger = LoggerFactory.getLogger(BacktestRunner::class.java)
 
     /**
-     * Przykład backtestu, w którym:
-     *  1. Pobieramy/uzupełniamy dane roczne (rangeYears).
-     *  2. Ładujemy pliki roczne i łączymy w jedną listę Kline.
-     *  3. Uruchamiamy StrategyManager z wybranymi strategiami.
-     *  4. Logujemy wyniki do pliku i do konsoli.
+     * Backtest z wykorzystaniem wielu strategii (ale tylko jedna otwarta pozycja) na danych z ostatnich 2 lat.
      */
-    fun backtestMultipleStrategiesOnePosition(rangeYears: Int = 6) {
+    fun backtestMultipleStrategiesOnePosition(rangeYears: Int = 2) {
         val symbol = "BTCUSDT"
         val interval = "15m"
 
@@ -32,16 +28,17 @@ object BacktestRunner {
             interval = interval
         )
 
-        // 1) Upewniamy się, że mamy dane roczne z ostatnich N lat
+        // 1) Upewnij się, że mamy dane roczne z ostatnich 2 lat
         historicalManager.ensureYearlyDataUpToDate(rangeYears)
 
         // 2) Ładujemy wszystkie roczne pliki
         val allKlines: List<Kline> = historicalManager.loadAllYearData(rangeYears)
         logger.info("Loaded total ${allKlines.size} klines for backtest")
 
-        // 3) Tworzymy listę strategii (np. tylko BollingerScalpingStrategy)
-        val strategies: List<Strategy> = listOf(
-            BollingerScalpingStrategy()
+        // 3) Tworzymy listę strategii – obie strategie będą rozpatrywane, ale otwarta może być tylko jedna pozycja
+        val strategies = listOf(
+            BollingerScalpingStrategy(),
+            MovingAverageCrossStrategy()
         )
 
         val simulationExecutor = SimulationTradeExecutor()
@@ -49,7 +46,7 @@ object BacktestRunner {
             capital = 1000.0
         }
 
-        // 4) Odpalamy backtest
+        // 4) Backtest – przetwarzamy kolejne świece
         for ((i, candle) in allKlines.withIndex()) {
             val slice = allKlines.take(i + 1)
             manager.onNewCandle(candle, slice)
@@ -58,7 +55,7 @@ object BacktestRunner {
         logger.info("Multi-strategy done. Final capital = ${manager.capital}")
         logger.info("Trades=${manager.totalTrades}, Wins=${manager.totalWins}, Losses=${manager.totalLosses}")
 
-        // 5) Zapis do pliku
+        // 5) Zapis raportu do pliku
         BacktestFileLogger.writeReport(manager, extraLog = "rangeYears=$rangeYears, symbol=$symbol, interval=$interval")
     }
 }

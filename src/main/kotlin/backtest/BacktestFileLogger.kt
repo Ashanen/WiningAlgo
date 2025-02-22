@@ -10,7 +10,7 @@ object BacktestFileLogger {
     private val logger = LoggerFactory.getLogger(BacktestFileLogger::class.java)
 
     /**
-     * Zapisuje raport do pliku, np. "BacktestReport_2023-10-02_15-23-45.log"
+     * Zapisuje raport do pliku, np. "BacktestReport_2025-02-21_18-40-23.log"
      */
     fun writeReport(manager: StrategyManager, extraLog: String) {
         val userHome = System.getProperty("user.home")
