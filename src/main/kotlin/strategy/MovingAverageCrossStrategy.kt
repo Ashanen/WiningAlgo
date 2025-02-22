@@ -8,18 +8,19 @@ import model.StrategySignal
 import kotlin.math.min
 
 /**
- * Strategia otwierająca pozycję na przecięciu średnich kroczących:
- * - Golden cross (SMA7 przecina SMA25 od dołu) generuje sygnał BUY.
- * - Death cross (SMA7 przecina SMA25 od góry) generuje sygnał SELL.
+ * Strategia oparta na przecięciu średnich kroczących (SMA 7 i 25).
+ * Dynamiczne dostosowanie parametrów na podstawie bieżącego wolumenu:
+ * - Przy wolumenie ≥ highVolumeThreshold: slPct = 0.008, tpPct = 0.06, trailingOffsetPct = 0.004.
+ * - W przeciwnym razie: slPct = 0.012, tpPct = 0.045, trailingOffsetPct = 0.0055.
+ * Dodatkowo – sygnał generowany tylko, gdy wolumen przekracza minimalny próg (minVolumeForSignal).
  */
 class MovingAverageCrossStrategy(
     private val shortPeriod: Int = 7,
     private val longPeriod: Int = 25,
     private val riskPercent: Double = 0.02,
     private val maxRiskUsd: Double = 100.0,
-    private val slPct: Double = 0.015,
-    private val tpPct: Double = 0.03,
-    private val trailingOffsetPct: Double = 0.008
+    private val highVolumeThreshold: Double = 5000.0,
+    private val minVolumeForSignal: Double = 500.0  // dodatkowy próg minimalny
 ) : Strategy {
 
     override val name: String = "MovingAverageCrossStrategy"
@@ -33,21 +34,27 @@ class MovingAverageCrossStrategy(
         val closePrices = candlesSoFar.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closePrices.size < longPeriod + 1) return signals
 
-        // Obliczamy SMA dla krótkiego i długiego okresu
+        val currentVolume = candle.volume.toDoubleOrNull() ?: 0.0
+        if (currentVolume < minVolumeForSignal) return signals  // brak wystarczającej płynności
+
+        val (slPct, tpPct, trailingOffsetPct) = if (currentVolume >= highVolumeThreshold) {
+            Triple(0.008, 0.06, 0.004)
+        } else {
+            Triple(0.012, 0.045, 0.0055)
+        }
+
         val smaShort = Indicators.computeSma(closePrices, shortPeriod)
         val smaLong = Indicators.computeSma(closePrices, longPeriod)
-
         val i = closePrices.lastIndex
         if (i < longPeriod) return signals
 
-        // Sprawdzamy przecięcie SMA: porównujemy różnicę w poprzednim kroku i obecnym
         val prevDiff = smaShort[i - 1] - smaLong[i - 1]
         val currDiff = smaShort[i] - smaLong[i]
         val price = closePrices[i]
         val riskAmount = min(capital * riskPercent, maxRiskUsd)
 
-        // Golden cross: otwieramy BUY, gdy różnica przechodzi z ujemnej na dodatnią
         if (prevDiff <= 0 && currDiff > 0) {
+            // Golden cross – sygnał BUY
             val stopLoss = price * (1.0 - slPct)
             val takeProfit = price * (1.0 + tpPct)
             val riskPerUnit = price - stopLoss
@@ -59,13 +66,13 @@ class MovingAverageCrossStrategy(
                         price = price,
                         stopLoss = stopLoss,
                         takeProfit = takeProfit,
-                        quantity = quantity
+                        quantity = quantity,
+                        indicatorData = mapOf("volume" to currentVolume, "slPct" to slPct, "tpPct" to tpPct)
                     )
                 )
             }
-        }
-        // Death cross: otwieramy SELL, gdy różnica przechodzi z dodatniej na ujemną
-        else if (prevDiff >= 0 && currDiff < 0) {
+        } else if (prevDiff >= 0 && currDiff < 0) {
+            // Death cross – sygnał SELL
             val stopLoss = price * (1.0 + slPct)
             val takeProfit = price * (1.0 - tpPct)
             val riskPerUnit = stopLoss - price
@@ -77,7 +84,8 @@ class MovingAverageCrossStrategy(
                         price = price,
                         stopLoss = stopLoss,
                         takeProfit = takeProfit,
-                        quantity = quantity
+                        quantity = quantity,
+                        indicatorData = mapOf("volume" to currentVolume, "slPct" to slPct, "tpPct" to tpPct)
                     )
                 )
             }
@@ -88,6 +96,8 @@ class MovingAverageCrossStrategy(
     override fun onUpdatePosition(candle: Kline, openPosition: OpenPosition): List<StrategySignal> {
         val signals = mutableListOf<StrategySignal>()
         val price = candle.closePrice.toDoubleOrNull() ?: return signals
+        val currentVolume = candle.volume.toDoubleOrNull() ?: 0.0
+        val trailingOffsetPct = if (currentVolume >= highVolumeThreshold) 0.004 else 0.0055
         val offset = price * trailingOffsetPct
 
         when (openPosition.side) {
@@ -100,15 +110,7 @@ class MovingAverageCrossStrategy(
                     (openPosition.takeProfit != null && price >= openPosition.takeProfit) ||
                     (openPosition.stopLoss != null && price <= openPosition.stopLoss)
                 ) {
-                    signals.add(
-                        StrategySignal(
-                            type = SignalType.CLOSE,
-                            price = price,
-                            stopLoss = 0.0,
-                            takeProfit = 0.0,
-                            quantity = openPosition.quantity
-                        )
-                    )
+                    signals.add(StrategySignal(SignalType.CLOSE, price, indicatorData = mapOf("volume" to currentVolume)))
                 }
             }
             "SELL" -> {
@@ -120,15 +122,7 @@ class MovingAverageCrossStrategy(
                     (openPosition.takeProfit != null && price <= openPosition.takeProfit) ||
                     (openPosition.stopLoss != null && price >= openPosition.stopLoss)
                 ) {
-                    signals.add(
-                        StrategySignal(
-                            type = SignalType.CLOSE,
-                            price = price,
-                            stopLoss = 0.0,
-                            takeProfit = 0.0,
-                            quantity = openPosition.quantity
-                        )
-                    )
+                    signals.add(StrategySignal(SignalType.CLOSE, price, indicatorData = mapOf("volume" to currentVolume)))
                 }
             }
         }

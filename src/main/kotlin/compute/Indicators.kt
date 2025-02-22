@@ -12,6 +12,12 @@ data class BollingerBands(
     val lower: List<Double>
 )
 
+data class MacdResult(
+    val macd: List<Double>,
+    val signal: List<Double>,
+    val histogram: List<Double>
+)
+
 object Indicators {
 
     fun computeRsi(prices: List<Double>, period: Int = 14): List<Double> {
@@ -155,4 +161,38 @@ object Indicators {
         }
         return result
     }
+
+    /**
+     * Oblicza MACD na podstawie listy cen.
+     * @param prices Lista cen (double).
+     * @param fastPeriod Okres szybkiej EMA (domyślnie 12).
+     * @param slowPeriod Okres wolnej EMA (domyślnie 26).
+     * @param signalPeriod Okres linii sygnałowej (domyślnie 9).
+     * @return Obiekt MacdResult zawierający macd, linię sygnału oraz histogram.
+     */
+    fun computeMacd(
+        prices: List<Double>,
+        fastPeriod: Int = 12,
+        slowPeriod: Int = 26,
+        signalPeriod: Int = 9
+    ): MacdResult {
+        val emaFast = computeEma(prices, fastPeriod)
+        val emaSlow = computeEma(prices, slowPeriod)
+        val macdLine = emaFast.zip(emaSlow) { fast, slow -> fast - slow }
+        val signalLine = computeEma(macdLine, signalPeriod)
+        val histogram = macdLine.zip(signalLine) { macd, signal -> macd - signal }
+        return MacdResult(macdLine, signalLine, histogram)
+    }
+
+    fun computeStdDev(prices: List<Double>, period: Int): List<Double> {
+        val result = MutableList(prices.size) { Double.NaN }
+        for (i in period - 1 until prices.size) {
+            val window = prices.subList(i - period + 1, i + 1)
+            val avg = window.average()
+            val variance = window.map { (it - avg) * (it - avg) }.average()
+            result[i] = sqrt(variance)
+        }
+        return result
+    }
+
 }
