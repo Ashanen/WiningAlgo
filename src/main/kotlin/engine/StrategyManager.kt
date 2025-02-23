@@ -26,7 +26,8 @@ class StrategyManager(
         for (position in openPositions) {
             val strategy = strategies.find { it.name == position.strategyName }
             if (strategy != null) {
-                val signals = strategy.onUpdatePosition(candle, position)
+                // Poprawione wywołanie metody onUpdatePosition
+                val signals = strategy.onUpdatePosition(candle, candles, position)
                 if (signals.any { it.type == SignalType.CLOSE }) {
                     positionsToClose.add(position)
                 }

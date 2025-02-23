@@ -6,184 +6,100 @@ import kotlin.math.max
 import kotlin.math.sqrt
 import kotlin.Double.Companion.NaN
 
-data class BollingerBands(
-    val middle: List<Double>,
-    val upper: List<Double>,
-    val lower: List<Double>
-)
-
-data class MacdResult(
-    val macd: List<Double>,
-    val signal: List<Double>,
-    val histogram: List<Double>
-)
-
 object Indicators {
 
-    fun computeRsi(prices: List<Double>, period: Int = 14): List<Double> {
-        val rsiList = MutableList(prices.size) { NaN }
-        if (prices.size < period) return rsiList
+    // Struktury danych dla wyników
+    data class MacdResult(val macdLine: List<Double>, val signalLine: List<Double>, val histogram: List<Double>)
+    data class BollingerBandsResult(val middle: List<Double>, val upper: List<Double>, val lower: List<Double>)
 
-        val changes = prices.zipWithNext { prev, curr -> curr - prev }
-        var gainSum = 0.0
-        var lossSum = 0.0
-
-        changes.take(period - 1).forEach {
-            if (it > 0) gainSum += it else lossSum -= it
+    // Funkcja pomocnicza do obliczania SMA (Simple Moving Average)
+    private fun computeSma(prices: List<Double>, period: Int): List<Double> {
+        return (period until prices.size).map { i ->
+            prices.subList(i - period, i).average()
         }
-        var avgGain = gainSum / period
-        var avgLoss = lossSum / period
+    }
 
-        val firstRsi = if (avgLoss == 0.0) 100.0 else {
-            val rs = avgGain / avgLoss
-            100.0 - (100.0 / (1.0 + rs))
+    // **EMA (Exponential Moving Average)**
+    fun computeEma(prices: List<Double>, period: Int): List<Double> {
+        if (prices.isEmpty()) return emptyList()
+        val k = 2.0 / (period + 1) // Współczynnik wygładzania
+        val ema = mutableListOf(prices.first()) // Pierwsza wartość to cena początkowa
+        for (i in 1 until prices.size) {
+            val currentEma = prices[i] * k + ema.last() * (1 - k)
+            ema.add(currentEma)
         }
-        rsiList[period - 1] = firstRsi
+        return ema
+    }
 
-        for (i in period until prices.size) {
-            val diff = changes[i - 1]
-            val gain = if (diff > 0) diff else 0.0
-            val loss = if (diff < 0) -diff else 0.0
+    // **MACD (Moving Average Convergence Divergence)**
+    fun computeMacd(prices: List<Double>, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
+        val fastEma = computeEma(prices, fastPeriod) // Szybka EMA
+        val slowEma = computeEma(prices, slowPeriod) // Wolna EMA
+        val macdLine = fastEma.zip(slowEma) { f, s -> f - s } // MACD Line = szybka EMA - wolna EMA
+        val signalLine = computeEma(macdLine, signalPeriod) // Signal Line = EMA z MACD Line
+        val histogram = macdLine.zip(signalLine) { m, s -> m - s } // Histogram = MACD Line - Signal Line
+        return MacdResult(macdLine, signalLine, histogram)
+    }
 
-            avgGain = ((avgGain * (period - 1)) + gain) / period
-            avgLoss = ((avgLoss * (period - 1)) + loss) / period
+    // **RSI (Relative Strength Index)**
+    fun computeRsi(prices: List<Double>, period: Int): List<Double> {
+        if (prices.size < period + 1) return emptyList()
+        val changes = prices.zipWithNext { a, b -> b - a } // Zmiany cenowe
+        val gains = changes.map { if (it > 0) it else 0.0 } // Zyski
+        val losses = changes.map { if (it < 0) -it else 0.0 } // Straty
 
-            val rs = if (avgLoss == 0.0) Double.POSITIVE_INFINITY else avgGain / avgLoss
-            val rsi = 100.0 - (100.0 / (1.0 + rs))
-            rsiList[i] = rsi
+        var avgGain = gains.subList(0, period).average() // Początkowa średnia zysków
+        var avgLoss = losses.subList(0, period).average() // Początkowa średnia strat
+        val rsiList = mutableListOf<Double>()
+
+        // Pierwsze RSI
+        val firstRsi = if (avgLoss == 0.0) 100.0 else 100.0 - (100.0 / (1.0 + avgGain / avgLoss))
+        rsiList.add(firstRsi)
+
+        // Kolejne wartości RSI
+        for (i in period until changes.size) {
+            val currentGain = if (changes[i] > 0) changes[i] else 0.0
+            val currentLoss = if (changes[i] < 0) -changes[i] else 0.0
+            avgGain = (avgGain * (period - 1) + currentGain) / period
+            avgLoss = (avgLoss * (period - 1) + currentLoss) / period
+            val rsi = if (avgLoss == 0.0) 100.0 else 100.0 - (100.0 / (1.0 + avgGain / avgLoss))
+            rsiList.add(rsi)
         }
         return rsiList
     }
 
-    fun computeBollingerBands(prices: List<Double>, period: Int, multiplier: Double): BollingerBands {
-        val middle = MutableList(prices.size) { 0.0 }
-        val upper = MutableList(prices.size) { 0.0 }
-        val lower = MutableList(prices.size) { 0.0 }
-
-        for (i in prices.indices) {
-            if (i < period - 1) {
-                val avg = prices.take(i + 1).average()
-                middle[i] = avg
-                upper[i] = avg
-                lower[i] = avg
-            } else {
-                val window = prices.subList(i - period + 1, i + 1)
-                val sma = window.average()
-                middle[i] = sma
-                val sd = sqrt(window.map { (it - sma) * (it - sma) }.average())
-                upper[i] = sma + multiplier * sd
-                lower[i] = sma - multiplier * sd
-            }
+    // **ATR (Average True Range)**
+    fun computeAtr(klines: List<Kline>, period: Int): List<Double> {
+        if (klines.size < period + 1) return emptyList()
+        val trList = mutableListOf<Double>()
+        for (i in 1 until klines.size) {
+            val high = klines[i].highPrice.toDouble()
+            val low = klines[i].lowPrice.toDouble()
+            val prevClose = klines[i - 1].closePrice.toDouble()
+            val tr = maxOf(high - low, abs(high - prevClose), abs(low - prevClose)) // True Range
+            trList.add(tr)
         }
-        return BollingerBands(middle, upper, lower)
+        val atrList = mutableListOf<Double>()
+        var currentAtr = trList.subList(0, period).average() // Początkowy ATR
+        atrList.add(currentAtr)
+        for (i in period until trList.size) {
+            currentAtr = (currentAtr * (period - 1) + trList[i]) / period // Wygładzona średnia
+            atrList.add(currentAtr)
+        }
+        return atrList
     }
 
-    fun calculateATR(candles: List<Kline>): Double {
-        if (candles.size < 2) return 0.0
-        val trueRanges = mutableListOf<Double>()
-        for (i in 1 until candles.size) {
-            val high = candles[i].highPrice.toDoubleOrNull() ?: continue
-            val low = candles[i].lowPrice.toDoubleOrNull() ?: continue
-            val prevClose = candles[i - 1].closePrice.toDoubleOrNull() ?: continue
-            val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
-            trueRanges.add(tr)
+    // **Bollinger Bands**
+    fun computeBollingerBands(prices: List<Double>, period: Int, numDevs: Double): BollingerBandsResult {
+        if (prices.size < period) return BollingerBandsResult(emptyList(), emptyList(), emptyList())
+        val sma = computeSma(prices, period) // Środkowa wstęga (SMA)
+        val stdDev = (period until prices.size).map { i ->
+            val sublist = prices.subList(i - period, i)
+            val mean = sublist.average()
+            sqrt(sublist.map { (it - mean) * (it - mean) }.sum() / period) // Odchylenie standardowe
         }
-        return if (trueRanges.isNotEmpty()) trueRanges.average() else 0.0
-    }
-
-    fun computeSma(values: List<Double>, period: Int): List<Double> {
-        val result = MutableList(values.size) { NaN }
-        if (period <= 0) return result
-        for (i in values.indices) {
-            if (i < period - 1) continue
-            val window = values.subList(i - period + 1, i + 1)
-            val avg = window.average()
-            result[i] = avg
-        }
-        return result
-    }
-
-    fun computeMaAngle(ma: List<Double>, point: Double = 0.0001): List<Double> {
-        val angleList = MutableList(ma.size) { NaN }
-        for (i in 1 until ma.size) {
-            if (ma[i].isNaN() || ma[i-1].isNaN()) continue
-            val tangens = (ma[i] - ma[i-1]) / (40.0 * point)
-            angleList[i] = Math.toDegrees(tangens)
-        }
-        return angleList
-    }
-
-    fun computeAtr(candles: List<Kline>, period: Int = 14): List<Double> {
-        val size = candles.size
-        val atr = MutableList(size) { NaN }
-        if (size < 2) return atr
-
-        val trList = MutableList(size) { NaN }
-        trList[0] = 0.0
-        for (i in 1 until size) {
-            val high = candles[i].highPrice.toDoubleOrNull() ?: continue
-            val low = candles[i].lowPrice.toDoubleOrNull() ?: continue
-            val prevClose = candles[i - 1].closePrice.toDoubleOrNull() ?: continue
-            val tr = max(high - low, max(abs(high - prevClose), abs(low - prevClose)))
-            trList[i] = tr
-        }
-        if (period > size) return atr
-
-        var sumTR = 0.0
-        for (i in 0 until period) {
-            if (trList[i].isNaN()) return atr
-            sumTR += trList[i]
-        }
-        atr[period - 1] = sumTR / period
-
-        for (i in period until size) {
-            if (trList[i].isNaN() || atr[i - 1].isNaN()) continue
-            val prevAtr = atr[i - 1]
-            val newAtr = ((prevAtr * (period - 1)) + trList[i]) / period
-            atr[i] = newAtr
-        }
-        return atr
-    }
-
-    fun computeEma(prices: List<Double>, period: Int): List<Double> {
-        val result = MutableList(prices.size) { Double.NaN }
-        if (prices.isEmpty() || period <= 0) return result
-
-        val multiplier = 2.0 / (period + 1)
-        var prevEma = prices.first()
-        result[0] = prevEma
-
-        for (i in 1 until prices.size) {
-            val price = prices[i]
-            val ema = (price - prevEma) * multiplier + prevEma
-            result[i] = ema
-            prevEma = ema
-        }
-        return result
-    }
-
-    fun computeMacd(
-        prices: List<Double>,
-        fastPeriod: Int = 12,
-        slowPeriod: Int = 26,
-        signalPeriod: Int = 9
-    ): MacdResult {
-        val emaFast = computeEma(prices, fastPeriod)
-        val emaSlow = computeEma(prices, slowPeriod)
-        val macdLine = emaFast.zip(emaSlow) { fast, slow -> fast - slow }
-        val signalLine = computeEma(macdLine, signalPeriod)
-        val histogram = macdLine.zip(signalLine) { macd, signal -> macd - signal }
-        return MacdResult(macdLine, signalLine, histogram)
-    }
-
-    fun computeStdDev(prices: List<Double>, period: Int): List<Double> {
-        val result = MutableList(prices.size) { Double.NaN }
-        for (i in period - 1 until prices.size) {
-            val window = prices.subList(i - period + 1, i + 1)
-            val avg = window.average()
-            val variance = window.map { (it - avg) * (it - avg) }.average()
-            result[i] = sqrt(variance)
-        }
-        return result
+        val upper = sma.zip(stdDev) { m, s -> m + numDevs * s } // Górna wstęga
+        val lower = sma.zip(stdDev) { m, s -> m - numDevs * s } // Dolna wstęga
+        return BollingerBandsResult(sma, upper, lower)
     }
 }

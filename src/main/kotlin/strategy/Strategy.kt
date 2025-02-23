@@ -6,15 +6,6 @@ import model.StrategySignal
 
 interface Strategy {
     val name: String
-
-    fun onNewCandle(
-        candle: Kline,
-        candlesSoFar: List<Kline>,
-        capital: Double
-    ): List<StrategySignal>
-
-    fun onUpdatePosition(
-        candle: Kline,
-        openPosition: OpenPosition
-    ): List<StrategySignal>
+    fun onNewCandle(candle: Kline, candles: List<Kline>, capital: Double): List<StrategySignal>
+    fun onUpdatePosition(candle: Kline, candles: List<Kline>, openPosition: OpenPosition): List<StrategySignal>
 }

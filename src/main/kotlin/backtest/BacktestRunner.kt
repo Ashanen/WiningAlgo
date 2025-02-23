@@ -17,12 +17,11 @@ object BacktestRunner {
     private val logger = LoggerFactory.getLogger(BacktestRunner::class.java)
 
     fun runBacktest(rangeYears: Int = 2, symbol: String = "BTCUSDT", interval: String = "15m") {
-        // Inicjalizacja klienta – upewnij się, że API_KEY i SECRET_KEY są poprawnie zdefiniowane
         val futuresClient = UMFuturesClientImpl(API_KEY, SECRET_KEY)
         val historicalManager = HistoricalDataManager(futuresClient, symbol, interval)
         historicalManager.ensureYearlyDataUpToDate(rangeYears)
         val allKlines: List<Kline> = historicalManager.loadAllYearData(rangeYears)
-        logger.info("Loaded total ${allKlines.size} klines for backtest")
+        logger.info("Loaded total ${allKlines.size} klines for backtest on interval $interval")
 
         val strategies = listOf(
             RSIOverboughtOversoldTrendStrategy(),
@@ -35,7 +34,6 @@ object BacktestRunner {
             capital = 1000.0
         }
 
-        // Utwórz analizator płynności (prosty)
         val liquidityAnalyzer = LiquidityAnalyzer()
 
         for ((i, candle) in allKlines.withIndex()) {
@@ -57,7 +55,11 @@ object BacktestRunner {
         BacktestFileLogger.writeReport(manager, extraLog = extraLog)
     }
 
-    fun backtestMultipleStrategiesOnePosition(rangeYears: Int = 2, symbol: String = "BTCUSDT", interval: String = "15m") {
-        runBacktest(rangeYears, symbol, interval)
+    fun backtestMultipleIntervals(rangeYears: Int = 2, symbol: String = "BTCUSDT") {
+        val intervals = listOf("5m", "15m", "30m", "1h")
+        for (interval in intervals) {
+            println("Running backtest for interval: $interval")
+            runBacktest(rangeYears, symbol, interval)
+        }
     }
 }
