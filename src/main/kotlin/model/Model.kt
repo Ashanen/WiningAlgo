@@ -23,7 +23,7 @@ data class StrategySignal(
     val stopLoss: Double? = null,
     val takeProfit: Double? = null,
     val quantity: Double = 0.0,
-    val indicatorData: Map<String, Any>? = null
+    val indicatorData: Map<String, Any?>? = null
 )
 
 enum class SignalType {
@@ -40,7 +40,7 @@ data class OpenPosition(
     var minFavorable: Double = Double.MAX_VALUE,
     val openTime: Long = 0L,
     val strategyName: String = "",
-    val indicatorData: Map<String, Any>? = null
+    val indicatorData: Map<String, Any?>? = null
 )
 
 data class TradeRecord(
@@ -51,7 +51,7 @@ data class TradeRecord(
     val exitPrice: Double,
     val profit: Double,
     val durationMillis: Long,
-    val indicatorData: Map<String, Any>? = null,
+    val indicatorData: Map<String, Any?>? = null,
     val volume: Double = 0.0,
     val liquidityStats: LiquidityStats? = null
 )

@@ -1,10 +1,13 @@
 package strategy
 
 import compute.Indicators
+import compute.Indicators.IchimokuResult
+import compute.Indicators.StochasticResult
 import model.Kline
 import model.OpenPosition
 import model.SignalType
 import model.StrategySignal
+import TimeUtils
 
 class EnhancedAdaptiveMACDStrategy(
     private val fastPeriod: Int = 12,
@@ -14,7 +17,24 @@ class EnhancedAdaptiveMACDStrategy(
     private val atrPeriod: Int = 14,
     private val baseRiskPercent: Double = 0.01,
     private val atrMultiplierSL: Double = 1.0,
-    private val atrMultiplierTP: Double = 3.0
+    private val atrMultiplierTP: Double = 3.0,
+    // Flaga wyboru adaptacyjnego MACD
+    private val useAdaptive: Boolean = true,
+    // Nowe opcje dla dodatkowych wskaźników
+    private val useStochastic: Boolean = true,
+    private val stochasticPeriod: Int = 14,
+    private val stochasticDPeriod: Int = 3,
+    private val stochasticOverbought: Double = 80.0,
+    private val stochasticOversold: Double = 20.0,
+    private val useAdx: Boolean = true,
+    private val adxPeriod: Int = 14,
+    private val adxThreshold: Double = 20.0,
+    private val useIchimoku: Boolean = true,
+    private val tenkanPeriod: Int = 9,
+    private val kijunPeriod: Int = 26,
+    private val senkouSpanBPeriod: Int = 52,
+    private val ichimokuDisplacement: Int = 26,
+    private val useParabolicSar: Boolean = false  // domyślnie wyłączone
 ) : Strategy {
 
     override val name: String = "EnhancedAdaptiveMACDStrategy"
@@ -30,10 +50,17 @@ class EnhancedAdaptiveMACDStrategy(
         val closePrices = candles.mapNotNull { it.closePrice.toDoubleOrNull() }
         if (closePrices.size < slowPeriod) return emptyList()
 
-        val macdResult = Indicators.computeMacd(closePrices, fastPeriod, slowPeriod, signalPeriod)
+        // MACD – adaptacyjny lub klasyczny
+        val macdResult = if (useAdaptive) {
+            Indicators.computeAdaptiveMacd(closePrices, fastPeriod, slowPeriod, signalPeriod)
+        } else {
+            Indicators.computeMacd(closePrices, fastPeriod, slowPeriod, signalPeriod)
+        }
         if (macdResult.macdLine.size < 2 || macdResult.signalLine.size < 2) return emptyList()
+
         val rsi = Indicators.computeRsi(closePrices, rsiPeriod)
         if (rsi.isEmpty()) return emptyList()
+
         val atrValues = Indicators.computeAtr(candles, atrPeriod)
         if (atrValues.isEmpty()) return emptyList()
 
@@ -44,10 +71,52 @@ class EnhancedAdaptiveMACDStrategy(
         val currentPrice = closePrices.last()
         val avgVolume = candles.takeLast(20).mapNotNull { it.volume.toDoubleOrNull() }.average()
         val currentVolume = candle.volume.toDoubleOrNull() ?: 0.0
-        val riskPercent = if (TimeUtils.isTradingTime(candle.closeTime)) baseRiskPercent * 2 else baseRiskPercent / 2
-        val signals = mutableListOf<StrategySignal>()
 
-        if (currentMacd > currentSignal && currentRSI > 50 && currentVolume > avgVolume * 1.0) {
+        // Dodatkowe wskaźniki:
+        var stochastic: StochasticResult? = null
+        if (useStochastic && candles.size >= stochasticPeriod) {
+            stochastic = Indicators.computeStochasticOscillator(candles, stochasticPeriod, stochasticDPeriod)
+        }
+        val adxValues = if (useAdx) Indicators.computeAdx(candles, adxPeriod) else emptyList()
+        val ichimoku: IchimokuResult? = if (useIchimoku && candles.size >= senkouSpanBPeriod) {
+            Indicators.computeIchimoku(candles, tenkanPeriod, kijunPeriod, senkouSpanBPeriod, ichimokuDisplacement)
+        } else null
+
+        // Ustalanie ryzyka – modyfikacja bazowa
+        val riskPercent = if (TimeUtils.isTradingTime(candle.closeTime)) baseRiskPercent * 2 else baseRiskPercent / 2
+
+        // Główne warunki – baza na MACD, RSI i wolumenie
+        var buyCondition = currentMacd > currentSignal && currentRSI > 50 && currentVolume > avgVolume
+        var sellCondition = currentMacd < currentSignal && currentRSI < 50 && currentVolume > avgVolume
+
+        // Filtry dodatkowe:
+        if (useAdx && adxValues.isNotEmpty()) {
+            val currentAdx = adxValues.last()
+            buyCondition = buyCondition && (currentAdx > adxThreshold)
+            sellCondition = sellCondition && (currentAdx > adxThreshold)
+        }
+        if (useStochastic && stochastic != null && stochastic.k.isNotEmpty()) {
+            val currentStoch = stochastic.k.last()
+            buyCondition = buyCondition && (currentStoch < stochasticOversold)
+            sellCondition = sellCondition && (currentStoch > stochasticOverbought)
+        }
+        if (useIchimoku && ichimoku != null && ichimoku.tenkanSen.isNotEmpty() && ichimoku.kijunSen.isNotEmpty()) {
+            val currentTenkan = ichimoku.tenkanSen.last()
+            val currentKijun = ichimoku.kijunSen.last()
+            buyCondition = buyCondition && (currentTenkan > currentKijun)
+            sellCondition = sellCondition && (currentTenkan < currentKijun)
+        }
+        if (useParabolicSar && candles.size >= 2) {
+            val sarValues = Indicators.computeParabolicSar(candles)
+            if (sarValues.isNotEmpty()) {
+                val currentSar = sarValues.last()
+                buyCondition = buyCondition && (currentPrice > currentSar)
+                sellCondition = sellCondition && (currentPrice < currentSar)
+            }
+        }
+
+        val signals = mutableListOf<StrategySignal>()
+        if (buyCondition) {
             val stopLoss = currentPrice - atrMultiplierSL * currentATR
             val takeProfit = currentPrice + atrMultiplierTP * currentATR
             val riskPerUnit = currentPrice - stopLoss
@@ -59,11 +128,20 @@ class EnhancedAdaptiveMACDStrategy(
                         price = currentPrice,
                         stopLoss = stopLoss,
                         takeProfit = takeProfit,
-                        quantity = quantity
+                        quantity = quantity,
+                        indicatorData = mapOf(
+                            "macd" to currentMacd,
+                            "signal" to currentSignal,
+                            "rsi" to currentRSI,
+                            "adx" to if (adxValues.isNotEmpty()) adxValues.last() else null,
+                            "stochasticK" to stochastic?.k?.last(),
+                            "tenkanSen" to ichimoku?.tenkanSen?.last(),
+                            "kijunSen" to ichimoku?.kijunSen?.last()
+                        )
                     )
                 )
             }
-        } else if (currentMacd < currentSignal && currentRSI < 50 && currentVolume > avgVolume * 1.0) {
+        } else if (sellCondition) {
             val stopLoss = currentPrice + atrMultiplierSL * currentATR
             val takeProfit = currentPrice - atrMultiplierTP * currentATR
             val riskPerUnit = stopLoss - currentPrice
@@ -75,7 +153,16 @@ class EnhancedAdaptiveMACDStrategy(
                         price = currentPrice,
                         stopLoss = stopLoss,
                         takeProfit = takeProfit,
-                        quantity = quantity
+                        quantity = quantity,
+                        indicatorData = mapOf(
+                            "macd" to currentMacd,
+                            "signal" to currentSignal,
+                            "rsi" to currentRSI,
+                            "adx" to if (adxValues.isNotEmpty()) adxValues.last() else null,
+                            "stochasticK" to stochastic?.k?.last(),
+                            "tenkanSen" to ichimoku?.tenkanSen?.last(),
+                            "kijunSen" to ichimoku?.kijunSen?.last()
+                        )
                     )
                 )
             }
