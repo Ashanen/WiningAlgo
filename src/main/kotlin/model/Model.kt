@@ -1,5 +1,7 @@
 package model
 
+import analyzer.LiquidityStats
+
 data class Kline(
     val openTime: Long,
     val openPrice: String,
@@ -49,5 +51,7 @@ data class TradeRecord(
     val exitPrice: Double,
     val profit: Double,
     val durationMillis: Long,
-    val indicatorData: Map<String, Any>? = null
+    val indicatorData: Map<String, Any>? = null,
+    val volume: Double = 0.0,
+    val liquidityStats: LiquidityStats? = null
 )

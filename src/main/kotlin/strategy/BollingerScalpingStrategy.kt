@@ -7,11 +7,11 @@ import model.SignalType
 import model.StrategySignal
 
 class BollingerScalpingStrategy(
-    private val bbPeriod: Int = 50,
+    private val bbPeriod: Int = 20,
     private val bbNumDevs: Double = 2.0,
     private val emaPeriod: Int = 50,
     private val atrPeriod: Int = 14,
-    private val riskPercent: Double = 0.01,
+    private val baseRiskPercent: Double = 0.01,
     private val atrMultiplierSL: Double = 1.0,
     private val atrMultiplierTP: Double = 3.0
 ) : Strategy {
@@ -39,6 +39,7 @@ class BollingerScalpingStrategy(
         val currentATR = atrValues.last()
         val currentLowerBB = bb.lower.last()
         val currentUpperBB = bb.upper.last()
+        val riskPercent = if (TimeUtils.isTradingTime(candle.closeTime)) baseRiskPercent * 2 else baseRiskPercent / 2
         val signals = mutableListOf<StrategySignal>()
 
         if (currentPrice <= currentLowerBB && currentPrice > currentEMA) {
@@ -86,39 +87,32 @@ class BollingerScalpingStrategy(
         val atrValues = Indicators.computeAtr(candles, atrPeriod)
         if (atrValues.isEmpty()) return emptyList()
         val currentATR = atrValues.last()
-        val trailingOffset = atrMultiplierSL * 2.0 * currentATR
+        val atrMultiplier = if (TimeUtils.isTradingTime(candle.closeTime)) atrMultiplierSL else 1.0
+        val trailingOffset = atrMultiplier * 2.0 * currentATR
         val signals = mutableListOf<StrategySignal>()
 
         when (openPosition.side) {
             "BUY" -> {
-                if (price > openPosition.maxFavorable) {
-                    openPosition.maxFavorable = price
-                }
+                if (price > openPosition.maxFavorable) openPosition.maxFavorable = price
                 val trailingStop = openPosition.maxFavorable - trailingOffset
                 if (price <= trailingStop || (openPosition.takeProfit != null && price >= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )
                 }
             }
             "SELL" -> {
-                if (price < openPosition.minFavorable) {
-                    openPosition.minFavorable = price
-                }
+                if (price < openPosition.minFavorable) openPosition.minFavorable = price
                 val trailingStop = openPosition.minFavorable + trailingOffset
                 if (price >= trailingStop || (openPosition.takeProfit != null && price <= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )

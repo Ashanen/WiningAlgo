@@ -7,12 +7,12 @@ import model.SignalType
 import model.StrategySignal
 
 class EnhancedAdaptiveMACDStrategy(
-    private val fastPeriod: Int = 10,
-    private val slowPeriod: Int = 21,
-    private val signalPeriod: Int = 5,
+    private val fastPeriod: Int = 12,
+    private val slowPeriod: Int = 26,
+    private val signalPeriod: Int = 9,
     private val rsiPeriod: Int = 14,
     private val atrPeriod: Int = 14,
-    private val riskPercent: Double = 0.01,
+    private val baseRiskPercent: Double = 0.01,
     private val atrMultiplierSL: Double = 1.0,
     private val atrMultiplierTP: Double = 3.0
 ) : Strategy {
@@ -44,6 +44,7 @@ class EnhancedAdaptiveMACDStrategy(
         val currentPrice = closePrices.last()
         val avgVolume = candles.takeLast(20).mapNotNull { it.volume.toDoubleOrNull() }.average()
         val currentVolume = candle.volume.toDoubleOrNull() ?: 0.0
+        val riskPercent = if (TimeUtils.isTradingTime(candle.closeTime)) baseRiskPercent * 2 else baseRiskPercent / 2
         val signals = mutableListOf<StrategySignal>()
 
         if (currentMacd > currentSignal && currentRSI > 50 && currentVolume > avgVolume * 1.0) {
@@ -91,39 +92,32 @@ class EnhancedAdaptiveMACDStrategy(
         val atrValues = Indicators.computeAtr(candles, atrPeriod)
         if (atrValues.isEmpty()) return emptyList()
         val currentATR = atrValues.last()
-        val trailingOffset = atrMultiplierSL * 2.0 * currentATR
+        val atrMultiplier = if (TimeUtils.isTradingTime(candle.closeTime)) atrMultiplierSL else 1.0
+        val trailingOffset = atrMultiplier * 2.0 * currentATR
         val signals = mutableListOf<StrategySignal>()
 
         when (openPosition.side) {
             "BUY" -> {
-                if (price > openPosition.maxFavorable) {
-                    openPosition.maxFavorable = price
-                }
+                if (price > openPosition.maxFavorable) openPosition.maxFavorable = price
                 val trailingStop = openPosition.maxFavorable - trailingOffset
                 if (price <= trailingStop || (openPosition.takeProfit != null && price >= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )
                 }
             }
             "SELL" -> {
-                if (price < openPosition.minFavorable) {
-                    openPosition.minFavorable = price
-                }
+                if (price < openPosition.minFavorable) openPosition.minFavorable = price
                 val trailingStop = openPosition.minFavorable + trailingOffset
                 if (price >= trailingStop || (openPosition.takeProfit != null && price <= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )

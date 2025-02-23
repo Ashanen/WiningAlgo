@@ -24,9 +24,9 @@ object BacktestRunner {
         logger.info("Loaded total ${allKlines.size} klines for backtest on interval $interval")
 
         val strategies = listOf(
-            RSIOverboughtOversoldTrendStrategy(),
-            EnhancedAdaptiveMACDStrategy(),
-            BollingerScalpingStrategy()
+            EnhancedAdaptiveMACDStrategy(fastPeriod = 12, slowPeriod = 26, signalPeriod = 9),
+            RSIOverboughtOversoldTrendStrategy(overbought = 80, oversold = 20),
+            BollingerScalpingStrategy(bbPeriod = 20)
         )
 
         val simulationExecutor = SimulationTradeExecutor()
@@ -53,13 +53,5 @@ object BacktestRunner {
         println(extraLog)
 
         BacktestFileLogger.writeReport(manager, extraLog = extraLog)
-    }
-
-    fun backtestMultipleIntervals(rangeYears: Int = 2, symbol: String = "BTCUSDT") {
-        val intervals = listOf("5m", "15m", "30m", "1h")
-        for (interval in intervals) {
-            println("Running backtest for interval: $interval")
-            runBacktest(rangeYears, symbol, interval)
-        }
     }
 }

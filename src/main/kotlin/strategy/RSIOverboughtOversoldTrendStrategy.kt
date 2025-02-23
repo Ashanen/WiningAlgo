@@ -8,9 +8,11 @@ import model.StrategySignal
 
 class RSIOverboughtOversoldTrendStrategy(
     private val rsiPeriod: Int = 14,
+    private val overbought: Int = 80,
+    private val oversold: Int = 20,
     private val emaPeriod: Int = 50,
     private val atrPeriod: Int = 14,
-    private val riskPercent: Double = 0.01,
+    private val baseRiskPercent: Double = 0.01,
     private val atrMultiplierSL: Double = 1.0,
     private val atrMultiplierTP: Double = 3.0
 ) : Strategy {
@@ -38,9 +40,10 @@ class RSIOverboughtOversoldTrendStrategy(
         val currentEMA = ema.last()
         val currentATR = atrValues.last()
         val currentPrice = closePrices.last()
+        val riskPercent = if (TimeUtils.isTradingTime(candle.closeTime)) baseRiskPercent * 2 else baseRiskPercent / 2
         val signals = mutableListOf<StrategySignal>()
 
-        if (currentRSI < 20 && currentPrice > currentEMA) {
+        if (currentRSI < oversold && currentPrice > currentEMA) {
             val stopLoss = currentPrice - atrMultiplierSL * currentATR
             val takeProfit = currentPrice + atrMultiplierTP * currentATR
             val riskPerUnit = currentPrice - stopLoss
@@ -56,7 +59,7 @@ class RSIOverboughtOversoldTrendStrategy(
                     )
                 )
             }
-        } else if (currentRSI > 80 && currentPrice < currentEMA) {
+        } else if (currentRSI > overbought && currentPrice < currentEMA) {
             val stopLoss = currentPrice + atrMultiplierSL * currentATR
             val takeProfit = currentPrice - atrMultiplierTP * currentATR
             val riskPerUnit = stopLoss - currentPrice
@@ -85,39 +88,32 @@ class RSIOverboughtOversoldTrendStrategy(
         val atrValues = Indicators.computeAtr(candles, atrPeriod)
         if (atrValues.isEmpty()) return emptyList()
         val currentATR = atrValues.last()
-        val trailingOffset = atrMultiplierSL * 2.0 * currentATR
+        val atrMultiplier = if (TimeUtils.isTradingTime(candle.closeTime)) atrMultiplierSL else 1.0
+        val trailingOffset = atrMultiplier * 2.0 * currentATR
         val signals = mutableListOf<StrategySignal>()
 
         when (openPosition.side) {
             "BUY" -> {
-                if (price > openPosition.maxFavorable) {
-                    openPosition.maxFavorable = price
-                }
+                if (price > openPosition.maxFavorable) openPosition.maxFavorable = price
                 val trailingStop = openPosition.maxFavorable - trailingOffset
                 if (price <= trailingStop || (openPosition.takeProfit != null && price >= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )
                 }
             }
             "SELL" -> {
-                if (price < openPosition.minFavorable) {
-                    openPosition.minFavorable = price
-                }
+                if (price < openPosition.minFavorable) openPosition.minFavorable = price
                 val trailingStop = openPosition.minFavorable + trailingOffset
                 if (price >= trailingStop || (openPosition.takeProfit != null && price <= openPosition.takeProfit)) {
                     signals.add(
                         StrategySignal(
                             type = SignalType.CLOSE,
                             price = price,
-                            stopLoss = null,
-                            takeProfit = null,
                             quantity = openPosition.quantity
                         )
                     )
