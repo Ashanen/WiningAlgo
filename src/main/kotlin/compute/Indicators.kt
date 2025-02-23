@@ -162,14 +162,6 @@ object Indicators {
         return result
     }
 
-    /**
-     * Oblicza MACD na podstawie listy cen.
-     * @param prices Lista cen (double).
-     * @param fastPeriod Okres szybkiej EMA (domyślnie 12).
-     * @param slowPeriod Okres wolnej EMA (domyślnie 26).
-     * @param signalPeriod Okres linii sygnałowej (domyślnie 9).
-     * @return Obiekt MacdResult zawierający macd, linię sygnału oraz histogram.
-     */
     fun computeMacd(
         prices: List<Double>,
         fastPeriod: Int = 12,
@@ -194,5 +186,4 @@ object Indicators {
         }
         return result
     }
-
 }

@@ -46,7 +46,6 @@ class SimulationTradeExecutor : TradeExecutor {
     }
 }
 
-
 class RealTradeExecutor(
     private val futuresClient: UMFuturesClientImpl
 ) : TradeExecutor {
@@ -82,10 +81,10 @@ class RealTradeExecutor(
 
         return try {
             val result = futuresClient.account().newOrder(parameters)
-            logger.info("Real Executor: Order {} placed. Result: {}", side, result)
+            logger.info("Real Executor: Order $side placed. Result: {}", result)
             true
         } catch (e: Exception) {
-            logger.error("Real Executor: Error placing order {}: {}", side, e.message)
+            logger.error("Real Executor: Error placing order $side: {}", e.message)
             false
         }
     }
@@ -114,10 +113,10 @@ class RealTradeExecutor(
 
         return try {
             val result = futuresClient.account().newOrder(parameters)
-            logger.info("Real Executor: Close order {} placed. Result: {}", closeSide, result)
+            logger.info("Real Executor: Close order $closeSide placed. Result: {}", result)
             true
         } catch (e: Exception) {
-            logger.error("Real Executor: Error placing close order {}: {}", closeSide, e.message)
+            logger.error("Real Executor: Error placing close order $closeSide: {}", e.message)
             false
         }
     }
@@ -144,4 +143,3 @@ class RealTradeExecutor(
         }
     }
 }
-

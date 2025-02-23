@@ -13,5 +13,3 @@ object TradingConfig {
         return "$desktop/Data/$symbol/$interval"
     }
 }
-
-

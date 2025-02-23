@@ -1,7 +1,6 @@
 package parser
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import model.Kline
 import org.slf4j.LoggerFactory
 

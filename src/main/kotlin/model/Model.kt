@@ -1,8 +1,5 @@
 package model
 
-/**
- * Reprezentuje świecę (kline) z Binance.
- */
 data class Kline(
     val openTime: Long,
     val openPrice: String,
@@ -18,10 +15,6 @@ data class Kline(
     val isClosed: Boolean = true
 )
 
-/**
- * Sygnał strategii (BUY, SELL, CLOSE) z parametrami.
- * Dodaliśmy pole indicatorData, które może zawierać dodatkowe dane wskaźnikowe.
- */
 data class StrategySignal(
     val type: SignalType,
     val price: Double,
@@ -35,12 +28,8 @@ enum class SignalType {
     BUY, SELL, CLOSE
 }
 
-/**
- * Informacje o otwartej pozycji.
- * Dodaliśmy pole indicatorData oraz openTime i strategyName.
- */
 data class OpenPosition(
-    val side: String,             // "BUY" lub "SELL"
+    val side: String,
     val entryPrice: Double,
     val stopLoss: Double? = null,
     val takeProfit: Double? = null,
@@ -52,9 +41,6 @@ data class OpenPosition(
     val indicatorData: Map<String, Any>? = null
 )
 
-/**
- * Rejestr pojedynczego handlu – zawiera szczegóły potrzebne do dalszej analizy.
- */
 data class TradeRecord(
     val strategyName: String,
     val entryTime: Long,
