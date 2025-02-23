@@ -1,11 +1,10 @@
 package leverage
 
-import parser.CandleParser
-import model.Kline
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
+import model.Kline
+import parser.CandleParser
 import java.util.LinkedHashMap
 
-// Funkcja zmieniająca dźwignię na Binance Futures
 fun setLeverage(futuresClient: UMFuturesClientImpl, symbol: String, leverage: Int): Boolean {
     val params = LinkedHashMap<String, Any>().apply {
         put("symbol", symbol)

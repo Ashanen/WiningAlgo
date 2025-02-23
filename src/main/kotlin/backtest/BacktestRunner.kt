@@ -1,12 +1,13 @@
 package backtest
 
 import API_KEY
-import historical.HistoricalDataManager
-import model.Kline
 import SECRET_KEY
+import analyzer.LiquidityAnalyzer
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
 import engine.StrategyManager
 import executor.SimulationTradeExecutor
+import historical.HistoricalDataManager
+import model.Kline
 import org.slf4j.LoggerFactory
 import strategy.BollingerScalpingStrategy
 import strategy.EnhancedAdaptiveMACDStrategy
@@ -34,7 +35,11 @@ object BacktestRunner {
             capital = 1000.0
         }
 
+        // Utwórz analizator płynności (prosty)
+        val liquidityAnalyzer = LiquidityAnalyzer()
+
         for ((i, candle) in allKlines.withIndex()) {
+            liquidityAnalyzer.processCandle(candle)
             val slice = allKlines.take(i + 1)
             manager.onNewCandle(candle, slice)
         }
@@ -42,15 +47,16 @@ object BacktestRunner {
         logger.info("Backtest complete. Final capital = ${manager.capital}")
         logger.info("Total Trades = ${manager.totalTrades}, Wins = ${manager.totalWins}, Losses = ${manager.totalLosses}")
 
-        // Wydruk raportu na konsolę
+        val extraLog = "rangeYears=$rangeYears, symbol=$symbol, interval=$interval\n" +
+                liquidityAnalyzer.generateReport()
+
         println("=== BACKTEST REPORT ===")
         println(manager.extraLog())
+        println(extraLog)
 
-        // Zapis raportu do pliku
-        BacktestFileLogger.writeReport(manager, extraLog = "")
+        BacktestFileLogger.writeReport(manager, extraLog = extraLog)
     }
 
-    // Funkcja zgodna z Main.kt
     fun backtestMultipleStrategiesOnePosition(rangeYears: Int = 2, symbol: String = "BTCUSDT", interval: String = "15m") {
         runBacktest(rangeYears, symbol, interval)
     }

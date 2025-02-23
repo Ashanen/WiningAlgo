@@ -1,11 +1,7 @@
 package engine
 
-import model.Kline
-import model.OpenPosition
-import model.SignalType
-import model.StrategySignal
-import model.TradeRecord
 import executor.TradeExecutor
+import model.*
 import org.slf4j.LoggerFactory
 import strategy.Strategy
 
@@ -16,7 +12,7 @@ class StrategyManager(
     private val logger = LoggerFactory.getLogger(StrategyManager::class.java)
 
     var capital: Double = 1000.0
-    private var openPosition: OpenPosition? = null
+    private val openPositions = mutableListOf<OpenPosition>()
 
     var totalTrades = 0
     var totalWins = 0
@@ -25,24 +21,28 @@ class StrategyManager(
     val tradeRecords = mutableListOf<TradeRecord>()
 
     fun onNewCandle(candle: Kline, candles: List<Kline>) {
-        if (openPosition != null) {
-            for (strategy in strategies) {
-                val exitSignals = strategy.onUpdatePosition(candle, openPosition!!)
-                for (sig in exitSignals) {
-                    if (sig.type == SignalType.CLOSE) {
-                        closePosition(candle, sig.price)
-                        return
-                    }
+        // Aktualizacja istniejących pozycji
+        val positionsToClose = mutableListOf<OpenPosition>()
+        for (position in openPositions) {
+            val strategy = strategies.find { it.name == position.strategyName }
+            if (strategy != null) {
+                val signals = strategy.onUpdatePosition(candle, position)
+                if (signals.any { it.type == SignalType.CLOSE }) {
+                    positionsToClose.add(position)
                 }
             }
-        } else {
-            for (strategy in strategies) {
-                val signals = strategy.onNewCandle(candle, candles, capital)
-                for (sig in signals) {
-                    if (sig.type == SignalType.BUY || sig.type == SignalType.SELL) {
-                        openPosition(candle, sig, strategy.name)
-                        return
-                    }
+        }
+        for (position in positionsToClose) {
+            closePosition(candle, position)
+        }
+
+        // Dla strategii, które nie mają jeszcze otwartej pozycji – sprawdzamy sygnały
+        for (strategy in strategies) {
+            if (openPositions.any { it.strategyName == strategy.name }) continue
+            val signals = strategy.onNewCandle(candle, candles, capital)
+            for (sig in signals) {
+                if (sig.type == SignalType.BUY || sig.type == SignalType.SELL) {
+                    openPosition(candle, sig, strategy.name)
                 }
             }
         }
@@ -61,41 +61,39 @@ class StrategyManager(
             strategyName = strategyName,
             indicatorData = signal.indicatorData
         )
-        openPosition = pos
+        openPositions.add(pos)
         logger.info("Opened position: $pos, capital=$capital, indicatorData=${signal.indicatorData}")
         tradeExecutor.openTrade(pos.side, pos.quantity, pos.entryPrice, pos.stopLoss, pos.takeProfit)
     }
 
-    private fun closePosition(candle: Kline, exitPrice: Double) {
-        val pos = openPosition ?: return
-        val profit = if (pos.side == "BUY") {
-            (exitPrice - pos.entryPrice) * pos.quantity
+    private fun closePosition(candle: Kline, position: OpenPosition) {
+        val currentPrice = candle.closePrice.toDoubleOrNull() ?: position.entryPrice
+        val profit = if (position.side == "BUY") {
+            (currentPrice - position.entryPrice) * position.quantity
         } else {
-            (pos.entryPrice - exitPrice) * pos.quantity
+            (position.entryPrice - currentPrice) * position.quantity
         }
         capital += profit
 
         totalTrades++
         if (profit >= 0) totalWins++ else totalLosses++
 
-        logger.info("Closed position with profit=$profit, new capital=$capital")
-        tradeExecutor.closeTrade(pos.side, pos.quantity, exitPrice)
+        logger.info("Closed position from ${position.strategyName} with profit=$profit, new capital=$capital")
+        tradeExecutor.closeTrade(position.side, position.quantity, currentPrice)
 
-        val exitTime = candle.openTime
-        val durationMillis = exitTime - pos.openTime
+        val durationMillis = candle.openTime - position.openTime
         val tradeRecord = TradeRecord(
-            strategyName = pos.strategyName,
-            entryTime = pos.openTime,
-            exitTime = exitTime,
-            entryPrice = pos.entryPrice,
-            exitPrice = exitPrice,
+            strategyName = position.strategyName,
+            entryTime = position.openTime,
+            exitTime = candle.openTime,
+            entryPrice = position.entryPrice,
+            exitPrice = currentPrice,
             profit = profit,
             durationMillis = durationMillis,
-            indicatorData = pos.indicatorData
+            indicatorData = position.indicatorData
         )
         tradeRecords.add(tradeRecord)
-
-        openPosition = null
+        openPositions.remove(position)
     }
 
     fun extraLog(): String {
