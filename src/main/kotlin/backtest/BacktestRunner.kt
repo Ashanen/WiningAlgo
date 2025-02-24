@@ -38,7 +38,9 @@ object BacktestRunner {
 
         for ((i, candle) in allKlines.withIndex()) {
             liquidityAnalyzer.processCandle(candle)
-            val slice = allKlines.take(i + 1)
+            // Zamiast tworzyć nową listę kopiującą wszystkie elementy, używamy subList,
+            // która zwraca widok na oryginalną listę, co znacząco przyspiesza operację.
+            val slice = allKlines.subList(0, i + 1)
             manager.onNewCandle(candle, slice)
         }
 
