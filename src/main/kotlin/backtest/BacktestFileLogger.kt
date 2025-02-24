@@ -3,6 +3,7 @@ package backtest
 import engine.StrategyManager
 import model.TradeRecord
 import org.slf4j.LoggerFactory
+import com.github.doyaaaaaken.kotlincsv.dsl.csvWriter
 import java.io.File
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -156,5 +157,39 @@ object BacktestFileLogger {
 
     private fun getHourOfDay(timestamp: Long): Int {
         return Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).hour
+    }
+
+    // Dodana funkcja generująca raport w formacie CSV
+    fun writeCsvReport(manager: StrategyManager, extraLog: String) {
+        val userHome = System.getProperty("user.home")
+        val reportsDir = File("$userHome${File.separator}BacktestReports")
+        if (!reportsDir.exists()) reportsDir.mkdirs()
+
+        val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss")
+        val timestamp = sdf.format(Date())
+        val fileName = "BacktestReport_${timestamp}.csv"
+        val file = File(reportsDir, fileName)
+
+        // Pobieramy transakcje i sortujemy je po czasie wyjścia
+        val tradeRecords = manager.tradeRecords.sortedBy { it.exitTime }
+
+        // Przygotowujemy nagłówek oraz wiersze dla pliku CSV
+        val header = listOf("Strategy", "Entry Time", "Exit Time", "Profit", "Volume", "Indicator Data")
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+        val rows = mutableListOf<List<String>>()
+        rows.add(header)
+
+        for (trade in tradeRecords) {
+            val entryTimeStr = dateFormat.format(Date(trade.entryTime))
+            val exitTimeStr = dateFormat.format(Date(trade.exitTime))
+            val profitStr = "%.2f".format(trade.profit)
+            val volumeStr = "%.2f".format(trade.volume)
+            val indicatorDataStr = trade.indicatorData?.toString() ?: ""
+            rows.add(listOf(trade.strategyName, entryTimeStr, exitTimeStr, profitStr, volumeStr, indicatorDataStr))
+        }
+
+        // Zapisujemy dane do pliku CSV przy użyciu biblioteki kotlin-csv-jvm
+        csvWriter().writeAll(rows, file)
+        logger.info("CSV Backtest report saved to ${file.absolutePath}")
     }
 }

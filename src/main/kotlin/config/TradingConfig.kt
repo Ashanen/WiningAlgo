@@ -24,20 +24,20 @@ object StrategyParameters {
     const val baseRiskPercent: Double = 0.01
     const val atrMultiplierSL: Double = 1.5
     const val atrMultiplierTP: Double = 3.0
-    const val enhancedMacdUseAdaptive: Boolean = true
+    const val enhancedMacdUseAdaptive: Boolean = false
 
     // Parametry dodatkowych wskaźników dla EnhancedAdaptiveMACDStrategy
-    const val useStochastic: Boolean = true
+    const val useStochastic: Boolean = false
     const val stochasticPeriod: Int = 9
     const val stochasticDPeriod: Int = 3
     const val stochasticOverbought: Double = 75.0
     const val stochasticOversold: Double = 25.0
 
-    const val useAdx: Boolean = true
+    const val useAdx: Boolean = false
     const val adxPeriod: Int = 14
     const val adxThreshold: Double = 15.0
 
-    const val useIchimoku: Boolean = true
+    const val useIchimoku: Boolean = false
     const val ichimokuTenkanPeriod: Int = 9
     const val ichimokuKijunPeriod: Int = 26
     const val ichimokuSenkouSpanBPeriod: Int = 52

@@ -96,5 +96,6 @@ object BacktestRunner {
         println(extraLog)
 
         BacktestFileLogger.writeReport(manager, extraLog = extraLog)
+        BacktestFileLogger.writeCsvReport(manager, extraLog = extraLog)
     }
 }
