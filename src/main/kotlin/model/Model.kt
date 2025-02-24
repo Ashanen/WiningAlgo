@@ -33,8 +33,8 @@ enum class SignalType {
 data class OpenPosition(
     val side: String,
     val entryPrice: Double,
-    val stopLoss: Double? = null,
-    val takeProfit: Double? = null,
+    var stopLoss: Double? = null,       // zmienione z val na var
+    var takeProfit: Double? = null,     // jeśli chcesz, aby również było mutowalne
     val quantity: Double,
     var maxFavorable: Double = 0.0,
     var minFavorable: Double = Double.MAX_VALUE,

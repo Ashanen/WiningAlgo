@@ -25,50 +25,9 @@ object BacktestRunner {
         logger.info("Loaded total ${allKlines.size} klines for backtest on interval $interval")
 
         val strategies = listOf(
-            EnhancedAdaptiveMACDStrategy(
-                fastPeriod = StrategyParameters.enhancedMacdFastPeriod,
-                slowPeriod = StrategyParameters.enhancedMacdSlowPeriod,
-                signalPeriod = StrategyParameters.enhancedMacdSignalPeriod,
-                rsiPeriod = StrategyParameters.rsiPeriod,
-                atrPeriod = StrategyParameters.atrPeriod,
-                baseRiskPercent = StrategyParameters.baseRiskPercent,
-                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
-                atrMultiplierTP = StrategyParameters.atrMultiplierTP,
-                useAdaptive = StrategyParameters.enhancedMacdUseAdaptive,
-                useStochastic = StrategyParameters.useStochastic,
-                stochasticPeriod = StrategyParameters.stochasticPeriod,
-                stochasticDPeriod = StrategyParameters.stochasticDPeriod,
-                stochasticOverbought = StrategyParameters.stochasticOverbought,
-                stochasticOversold = StrategyParameters.stochasticOversold,
-                useAdx = StrategyParameters.useAdx,
-                adxPeriod = StrategyParameters.adxPeriod,
-                adxThreshold = StrategyParameters.adxThreshold,
-                useIchimoku = StrategyParameters.useIchimoku,
-                tenkanPeriod = StrategyParameters.ichimokuTenkanPeriod,
-                kijunPeriod = StrategyParameters.ichimokuKijunPeriod,
-                senkouSpanBPeriod = StrategyParameters.ichimokuSenkouSpanBPeriod,
-                ichimokuDisplacement = StrategyParameters.ichimokuDisplacement,
-                useParabolicSar = StrategyParameters.useParabolicSar
-            ),
-            BollingerScalpingStrategy(
-                bbPeriod = StrategyParameters.bollingerBbPeriod,
-                bbNumDevs = StrategyParameters.bollingerBbNumDevs,
-                emaPeriod = StrategyParameters.bollingerEmaPeriod,
-                atrPeriod = StrategyParameters.atrPeriod,
-                baseRiskPercent = StrategyParameters.baseRiskPercent,
-                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
-                atrMultiplierTP = StrategyParameters.atrMultiplierTP
-            ),
-            RSIOverboughtOversoldTrendStrategy(
-                rsiPeriod = StrategyParameters.rsiPeriod,
-                overbought = StrategyParameters.rsiOverbought,
-                oversold = StrategyParameters.rsiOversold,
-                emaPeriod = StrategyParameters.rsiEmaPeriod,
-                atrPeriod = StrategyParameters.atrPeriod,
-                baseRiskPercent = StrategyParameters.baseRiskPercent,
-                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
-                atrMultiplierTP = StrategyParameters.atrMultiplierTP
-            )
+            EnhancedAdaptiveMACDStrategy(),
+            BollingerScalpingStrategy(),
+            RSIOverboughtOversoldTrendStrategy()
         )
 
         val simulationExecutor = SimulationTradeExecutor()

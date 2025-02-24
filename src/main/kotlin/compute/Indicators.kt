@@ -193,7 +193,7 @@ object Indicators {
             val prevHigh = klines[i - 1].highPrice.toDouble()
             val prevLow = klines[i - 1].lowPrice.toDouble()
             val prevClose = klines[i - 1].closePrice.toDouble()
-            val tr = max(currentHigh - currentLow, max(abs(currentHigh - prevClose), abs(currentLow - prevClose)))
+            val tr = maxOf(currentHigh - currentLow, kotlin.math.max(kotlin.math.abs(currentHigh - prevClose), kotlin.math.abs(currentLow - prevClose)))
             trList.add(tr)
             val plusDM = if ((currentHigh - prevHigh) > (prevLow - currentLow) && (currentHigh - prevHigh) > 0)
                 currentHigh - prevHigh else 0.0
@@ -203,6 +203,7 @@ object Indicators {
             minusDMList.add(minusDM)
         }
         fun smooth(data: List<Double>): List<Double> {
+            if (data.size < period) return emptyList()
             val smoothed = mutableListOf<Double>()
             smoothed.add(data.subList(0, period).average())
             for (i in period until data.size) {
@@ -223,11 +224,13 @@ object Indicators {
             } else {
                 val plusDI = (smoothedPlusDM[i] / trVal) * 100.0
                 val minusDI = (smoothedMinusDM[i] / trVal) * 100.0
-                val dx = if (plusDI + minusDI == 0.0) 0.0
-                else (abs(plusDI - minusDI) / (plusDI + minusDI)) * 100.0
+                val dx = if (plusDI + minusDI == 0.0) 0.0 else (kotlin.math.abs(plusDI - minusDI) / (plusDI + minusDI)) * 100.0
                 dxList.add(dx)
             }
         }
+        // Dodajemy warunek, by lista dxList miała co najmniej 'period' elementów
+        if (dxList.size < period) return emptyList()
+
         val adx = mutableListOf<Double>()
         adx.add(dxList.subList(0, period).average())
         for (i in period until dxList.size) {
@@ -237,6 +240,7 @@ object Indicators {
         }
         return adx
     }
+
 
     /**
      * Ichimoku Cloud.
