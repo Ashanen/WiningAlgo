@@ -24,12 +24,6 @@ object BacktestRunner {
         val allKlines: List<Kline> = historicalManager.loadAllYearData(rangeYears)
         logger.info("Loaded total ${allKlines.size} klines for backtest on interval $interval")
 
-        val strategies = listOf(
-            EnhancedAdaptiveMACDStrategy(),
-            BollingerScalpingStrategy(),
-            RSIOverboughtOversoldTrendStrategy()
-        )
-
         val simulationExecutor = SimulationTradeExecutor()
         val manager = StrategyManager(strategies, simulationExecutor).apply {
             capital = 1000.0
@@ -39,9 +33,11 @@ object BacktestRunner {
 
         for ((i, candle) in allKlines.withIndex()) {
             liquidityAnalyzer.processCandle(candle)
-            // Użycie subList dla optymalizacji – nie kopiujemy całej listy przy każdej iteracji.
-            val slice = allKlines.subList(0, i + 1)
+            val slice = allKlines.take(i + 1)
             manager.onNewCandle(candle, slice)
+            if (i % 1000 == 0) {
+                logger.info("Processed $i candles")
+            }
         }
 
         logger.info("Backtest complete. Final capital = ${manager.capital}")
@@ -55,6 +51,58 @@ object BacktestRunner {
         println(extraLog)
 
         BacktestFileLogger.writeReport(manager, extraLog = extraLog)
-        BacktestFileLogger.writeCsvReport(manager, extraLog = extraLog)
     }
 }
+
+val macdParams = StrategyParameters.EnhancedAdaptiveMACDParams(
+    fastPeriod = 12,
+    slowPeriod = 26,
+    signalPeriod = 9,
+    rsiPeriod = 14,
+    atrPeriod = 14,
+    useAdaptive = true,
+    useStochastic = true,
+    stochasticPeriod = 14,
+    stochasticDPeriod = 3,
+    stochasticOverbought = 80.0,
+    stochasticOversold = 20.0,
+    useAdx = true,
+    adxPeriod = 14,
+    adxThreshold = 25.0,
+    useIchimoku = true,
+    tenkanPeriod = 9,
+    kijunPeriod = 26,
+    senkouSpanBPeriod = 52,
+    ichimokuDisplacement = 26,
+    useParabolicSar = true,
+    baseRiskPercent = 0.01,
+    atrMultiplierSL = 2.0,
+    atrMultiplierTP = 3.0
+)
+
+val rsiParams = StrategyParameters.RSIOverboughtOversoldParams(
+    rsiPeriod = 14,
+    overbought = 80,
+    oversold = 20,
+    emaPeriod = 50,
+    atrPeriod = 14,
+    baseRiskPercent = 0.01,
+    atrMultiplierSL = 2.0,
+    atrMultiplierTP = 3.0
+)
+
+val bollingerParams = StrategyParameters.BollingerScalpingParams(
+    bbPeriod = 20,
+    bbNumDevs = 2.0,
+    emaPeriod = 50,
+    atrPeriod = 14,
+    baseRiskPercent = 0.01,
+    atrMultiplierSL = 1.0,
+    atrMultiplierTP = 3.0
+)
+
+val strategies = listOf(
+    EnhancedAdaptiveMACDStrategy(macdParams),
+    RSIOverboughtOversoldTrendStrategy(rsiParams),
+    BollingerScalpingStrategy(bollingerParams)
+)
