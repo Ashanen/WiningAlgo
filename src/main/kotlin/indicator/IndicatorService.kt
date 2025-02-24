@@ -1,19 +1,19 @@
 package indicator
 
+import compute.*
 import config.StrategyParameters
 import model.Kline
-import compute.Indicators
 
 data class IndicatorResults(
-    val macd: Indicators.MacdResult?,
-    val adaptiveMacd: Indicators.MacdResult?,
+    val macd: MacdResult?,
+    val adaptiveMacd: MacdResult?,
     val rsi: List<Double>?,
-    val bollingerBands: Indicators.BollingerBandsResult?,
-    val stochastic: Indicators.StochasticResult?,
-    val ichimoku: Indicators.IchimokuResult?,
+    val bollingerBands: BollingerBandsResult?,
+    val stochastic: StochasticResult?,
+    val ichimoku: IchimokuResult?,
     val adx: List<Double>?,
     val atr: List<Double>?,
-    val pivotPoints: Indicators.PivotPointsResult?
+    val pivotPoints: PivotPointsResult?
 )
 
 object IndicatorService {

@@ -5,40 +5,52 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+import org.slf4j.LoggerFactory
+
+// Struktury danych dla wyników wskaźników
+data class MacdResult(val macdLine: List<Double>, val signalLine: List<Double>, val histogram: List<Double>)
+data class BollingerBandsResult(val middle: List<Double>, val upper: List<Double>, val lower: List<Double>)
+data class StochasticResult(val k: List<Double>, val d: List<Double>)
+data class IchimokuResult(
+    val tenkanSen: List<Double>,
+    val kijunSen: List<Double>,
+    val senkouSpanA: List<Double>,
+    val senkouSpanB: List<Double>,
+    val chikouSpan: List<Double>
+)
+data class PivotPointsResult(
+    val pivot: Double,
+    val support1: Double,
+    val support2: Double,
+    val resistance1: Double,
+    val resistance2: Double
+)
+
+// Zbiorczy wynik wszystkich wskaźników
+data class IndicatorResults(
+    val macd: MacdResult?,
+    val adaptiveMacd: MacdResult?,
+    val rsi: List<Double>?,
+    val bollingerBands: BollingerBandsResult?,
+    val stochastic: StochasticResult?,
+    val ichimoku: IchimokuResult?,
+    val adx: List<Double>?,
+    val atr: List<Double>?,
+    val pivotPoints: PivotPointsResult?
+)
 
 object Indicators {
+    private val logger = LoggerFactory.getLogger(Indicators::class.java)
 
-    // Struktury danych dla wyników
-    data class MacdResult(val macdLine: List<Double>, val signalLine: List<Double>, val histogram: List<Double>)
-    data class BollingerBandsResult(val middle: List<Double>, val upper: List<Double>, val lower: List<Double>)
-    data class StochasticResult(val k: List<Double>, val d: List<Double>)
-    data class IchimokuResult(
-        val tenkanSen: List<Double>,
-        val kijunSen: List<Double>,
-        val senkouSpanA: List<Double>,
-        val senkouSpanB: List<Double>,
-        val chikouSpan: List<Double>
-    )
-    data class PivotPointsResult(
-        val pivot: Double,
-        val support1: Double,
-        val support2: Double,
-        val resistance1: Double,
-        val resistance2: Double
-    )
-
-    // --- Klasyczne wskaźniki ---
-
-    // SMA (Simple Moving Average)
     private fun computeSma(prices: List<Double>, period: Int): List<Double> {
+        if (period <= 0 || prices.size < period) return emptyList()
         return (period until prices.size).map { i ->
             prices.subList(i - period, i).average()
         }
     }
 
-    // EMA (Exponential Moving Average)
     fun computeEma(prices: List<Double>, period: Int): List<Double> {
-        if (prices.isEmpty()) return emptyList()
+        if (prices.isEmpty() || period <= 0) return emptyList()
         val k = 2.0 / (period + 1)
         val ema = mutableListOf(prices.first())
         for (i in 1 until prices.size) {
@@ -48,7 +60,6 @@ object Indicators {
         return ema
     }
 
-    // MACD (Moving Average Convergence Divergence)
     fun computeMacd(prices: List<Double>, fastPeriod: Int, slowPeriod: Int, signalPeriod: Int): MacdResult {
         val fastEma = computeEma(prices, fastPeriod)
         val slowEma = computeEma(prices, slowPeriod)
@@ -58,7 +69,6 @@ object Indicators {
         return MacdResult(macdLine, signalLine, histogram)
     }
 
-    // Adaptacyjne MACD – dynamiczne okresy na podstawie zmienności (Bollinger Bands)
     fun computeAdaptiveMacd(
         prices: List<Double>,
         baseFast: Int,
@@ -91,20 +101,19 @@ object Indicators {
         return MacdResult(macdLine, signalLine, histogram)
     }
 
-    // RSI (Relative Strength Index)
     fun computeRsi(prices: List<Double>, period: Int): List<Double> {
-        if (prices.size < period + 1) return emptyList()
+        if (prices.size < period + 1) {
+            logger.info("computeRsi: insufficient data, prices.size=${prices.size}, period=$period")
+            return emptyList()
+        }
         val changes = prices.zipWithNext { a, b -> b - a }
         val gains = changes.map { if (it > 0) it else 0.0 }
         val losses = changes.map { if (it < 0) -it else 0.0 }
-
         var avgGain = gains.subList(0, period).average()
         var avgLoss = losses.subList(0, period).average()
         val rsiList = mutableListOf<Double>()
-
         val firstRsi = if (avgLoss == 0.0) 100.0 else 100.0 - (100.0 / (1.0 + avgGain / avgLoss))
         rsiList.add(firstRsi)
-
         for (i in period until changes.size) {
             val currentGain = if (changes[i] > 0) changes[i] else 0.0
             val currentLoss = if (changes[i] < 0) -changes[i] else 0.0
@@ -116,7 +125,6 @@ object Indicators {
         return rsiList
     }
 
-    // ATR (Average True Range)
     fun computeAtr(klines: List<Kline>, period: Int): List<Double> {
         if (klines.size < period + 1) return emptyList()
         val trList = mutableListOf<Double>()
@@ -137,7 +145,6 @@ object Indicators {
         return atrList
     }
 
-    // Bollinger Bands
     fun computeBollingerBands(prices: List<Double>, period: Int, numDevs: Double): BollingerBandsResult {
         if (prices.size < period) return BollingerBandsResult(emptyList(), emptyList(), emptyList())
         val sma = computeSma(prices, period)
@@ -151,12 +158,6 @@ object Indicators {
         return BollingerBandsResult(sma, upper, lower)
     }
 
-    // --- Nowe wskaźniki techniczne ---
-
-    /**
-     * Stochastyczny Oscylator.
-     * Oblicza %K oraz %D (SMA z %K) dla zadanych okresów.
-     */
     fun computeStochasticOscillator(klines: List<Kline>, period: Int, dPeriod: Int = 3): StochasticResult {
         val kValues = mutableListOf<Double>()
         for (i in period - 1 until klines.size) {
@@ -178,89 +179,13 @@ object Indicators {
         return StochasticResult(kValues, dValues)
     }
 
-    /**
-     * ADX (Average Directional Index).
-     * Oblicza ADX na podstawie uproszczonego algorytmu Wildera.
-     */
-    fun computeAdx(klines: List<Kline>, period: Int): List<Double> {
-        if (klines.size < period + 1) return emptyList()
-        val trList = mutableListOf<Double>()
-        val plusDMList = mutableListOf<Double>()
-        val minusDMList = mutableListOf<Double>()
-        for (i in 1 until klines.size) {
-            val currentHigh = klines[i].highPrice.toDouble()
-            val currentLow = klines[i].lowPrice.toDouble()
-            val prevHigh = klines[i - 1].highPrice.toDouble()
-            val prevLow = klines[i - 1].lowPrice.toDouble()
-            val prevClose = klines[i - 1].closePrice.toDouble()
-            val tr = maxOf(currentHigh - currentLow, kotlin.math.max(kotlin.math.abs(currentHigh - prevClose), kotlin.math.abs(currentLow - prevClose)))
-            trList.add(tr)
-            val plusDM = if ((currentHigh - prevHigh) > (prevLow - currentLow) && (currentHigh - prevHigh) > 0)
-                currentHigh - prevHigh else 0.0
-            plusDMList.add(plusDM)
-            val minusDM = if ((prevLow - currentLow) > (currentHigh - prevHigh) && (prevLow - currentLow) > 0)
-                prevLow - currentLow else 0.0
-            minusDMList.add(minusDM)
-        }
-        fun smooth(data: List<Double>): List<Double> {
-            if (data.size < period) return emptyList()
-            val smoothed = mutableListOf<Double>()
-            smoothed.add(data.subList(0, period).average())
-            for (i in period until data.size) {
-                val prev = smoothed.last()
-                val newVal = (prev * (period - 1) + data[i]) / period
-                smoothed.add(newVal)
-            }
-            return smoothed
-        }
-        val smoothedTR = smooth(trList)
-        val smoothedPlusDM = smooth(plusDMList)
-        val smoothedMinusDM = smooth(minusDMList)
-        val dxList = mutableListOf<Double>()
-        for (i in smoothedTR.indices) {
-            val trVal = smoothedTR[i]
-            if (trVal == 0.0) {
-                dxList.add(0.0)
-            } else {
-                val plusDI = (smoothedPlusDM[i] / trVal) * 100.0
-                val minusDI = (smoothedMinusDM[i] / trVal) * 100.0
-                val dx = if (plusDI + minusDI == 0.0) 0.0 else (kotlin.math.abs(plusDI - minusDI) / (plusDI + minusDI)) * 100.0
-                dxList.add(dx)
-            }
-        }
-        // Dodajemy warunek, by lista dxList miała co najmniej 'period' elementów
-        if (dxList.size < period) return emptyList()
-
-        val adx = mutableListOf<Double>()
-        adx.add(dxList.subList(0, period).average())
-        for (i in period until dxList.size) {
-            val prevAdx = adx.last()
-            val newAdx = (prevAdx * (period - 1) + dxList[i]) / period
-            adx.add(newAdx)
-        }
-        return adx
-    }
-
-
-    /**
-     * Ichimoku Cloud.
-     * Oblicza Tenkan-sen, Kijun-sen, Senkou Span A, Senkou Span B oraz Chikou Span.
-     */
-    fun computeIchimoku(
-        klines: List<Kline>,
-        tenkanPeriod: Int = 9,
-        kijunPeriod: Int = 26,
-        senkouSpanBPeriod: Int = 52,
-        displacement: Int = 26
-    ): IchimokuResult {
+    fun computeIchimoku(klines: List<Kline>, tenkanPeriod: Int = 9, kijunPeriod: Int = 26, senkouSpanBPeriod: Int = 52, displacement: Int = 26): IchimokuResult {
         if (klines.size < senkouSpanBPeriod) return IchimokuResult(emptyList(), emptyList(), emptyList(), emptyList(), emptyList())
-
         val tenkanSen = mutableListOf<Double>()
         val kijunSen = mutableListOf<Double>()
         val senkouSpanA = mutableListOf<Double>()
         val senkouSpanB = mutableListOf<Double>()
         val chikouSpan = mutableListOf<Double>()
-
         for (i in tenkanPeriod - 1 until klines.size) {
             val slice = klines.subList(i - tenkanPeriod + 1, i + 1)
             val high = slice.maxOf { it.highPrice.toDouble() }
@@ -275,40 +200,24 @@ object Indicators {
         }
         val baseLength = min(tenkanSen.size, kijunSen.size)
         for (i in 0 until baseLength) {
-            val value = (tenkanSen[i] + kijunSen[i]) / 2.0
-            senkouSpanA.add(value)
+            senkouSpanA.add((tenkanSen[i] + kijunSen[i]) / 2.0)
         }
-        val senkouSpanAForward = List(displacement) { Double.NaN } + senkouSpanA
         for (i in senkouSpanBPeriod - 1 until klines.size) {
             val slice = klines.subList(i - senkouSpanBPeriod + 1, i + 1)
             val high = slice.maxOf { it.highPrice.toDouble() }
             val low = slice.minOf { it.lowPrice.toDouble() }
             senkouSpanB.add((high + low) / 2.0)
         }
+        val senkouSpanAForward = List(displacement) { Double.NaN } + senkouSpanA
         val senkouSpanBForward = List(displacement) { Double.NaN } + senkouSpanB
         val closePrices = klines.map { it.closePrice.toDouble() }
         val chikouSpanShifted = if (closePrices.size > displacement)
             closePrices.drop(displacement) + List(displacement) { Double.NaN }
         else List(closePrices.size) { Double.NaN }
-        return IchimokuResult(
-            tenkanSen = tenkanSen,
-            kijunSen = kijunSen,
-            senkouSpanA = senkouSpanAForward,
-            senkouSpanB = senkouSpanBForward,
-            chikouSpan = chikouSpanShifted
-        )
+        return IchimokuResult(tenkanSen, kijunSen, senkouSpanAForward, senkouSpanBForward, chikouSpanShifted)
     }
 
-    /**
-     * Parabolic SAR (Stop and Reverse).
-     * Uproszczona implementacja obliczająca SAR iteracyjnie.
-     */
-    fun computeParabolicSar(
-        klines: List<Kline>,
-        initialAF: Double = 0.02,
-        stepAF: Double = 0.02,
-        maxAF: Double = 0.2
-    ): List<Double> {
+    fun computeParabolicSar(klines: List<Kline>, initialAF: Double = 0.02, stepAF: Double = 0.02, maxAF: Double = 0.2): List<Double> {
         if (klines.size < 2) return emptyList()
         val sarValues = mutableListOf<Double>()
         var isUptrend = klines[1].closePrice.toDouble() > klines[0].closePrice.toDouble()
@@ -359,9 +268,63 @@ object Indicators {
         return sarValues
     }
 
-    /**
-     * Pivot Points – oblicza poziomy pivot, support i oporu na podstawie jednej świecy.
-     */
+    fun computeAdx(klines: List<Kline>, period: Int): List<Double> {
+        if (klines.size < period + 1) return emptyList()
+        val trList = mutableListOf<Double>()
+        val plusDMList = mutableListOf<Double>()
+        val minusDMList = mutableListOf<Double>()
+        for (i in 1 until klines.size) {
+            val currentHigh = klines[i].highPrice.toDouble()
+            val currentLow = klines[i].lowPrice.toDouble()
+            val prevHigh = klines[i - 1].highPrice.toDouble()
+            val prevLow = klines[i - 1].lowPrice.toDouble()
+            val prevClose = klines[i - 1].closePrice.toDouble()
+            val tr = max(currentHigh - currentLow, max(abs(currentHigh - prevClose), abs(currentLow - prevClose)))
+            trList.add(tr)
+            val plusDM = if ((currentHigh - prevHigh) > (prevLow - currentLow) && (currentHigh - prevHigh) > 0)
+                currentHigh - prevHigh else 0.0
+            plusDMList.add(plusDM)
+            val minusDM = if ((prevLow - currentLow) > (currentHigh - prevHigh) && (prevLow - currentLow) > 0)
+                prevLow - currentLow else 0.0
+            minusDMList.add(minusDM)
+        }
+        fun smooth(data: List<Double>): List<Double> {
+            if (data.size < period) return emptyList()
+            val smoothed = mutableListOf<Double>()
+            smoothed.add(data.subList(0, period).average())
+            for (i in period until data.size) {
+                val prev = smoothed.last()
+                val newVal = (prev * (period - 1) + data[i]) / period
+                smoothed.add(newVal)
+            }
+            return smoothed
+        }
+        val smoothedTR = smooth(trList)
+        val smoothedPlusDM = smooth(plusDMList)
+        val smoothedMinusDM = smooth(minusDMList)
+        val dxList = mutableListOf<Double>()
+        for (i in smoothedTR.indices) {
+            val trVal = smoothedTR[i]
+            if (trVal == 0.0) {
+                dxList.add(0.0)
+            } else {
+                val plusDI = (smoothedPlusDM[i] / trVal) * 100.0
+                val minusDI = (smoothedMinusDM[i] / trVal) * 100.0
+                val dx = if (plusDI + minusDI == 0.0) 0.0 else (abs(plusDI - minusDI) / (plusDI + minusDI)) * 100.0
+                dxList.add(dx)
+            }
+        }
+        if (dxList.size < period) return emptyList()
+        val adx = mutableListOf<Double>()
+        adx.add(dxList.subList(0, period).average())
+        for (i in period until dxList.size) {
+            val prevAdx = adx.last()
+            val newAdx = (prevAdx * (period - 1) + dxList[i]) / period
+            adx.add(newAdx)
+        }
+        return adx
+    }
+
     fun computePivotPoints(candle: Kline): PivotPointsResult {
         val high = candle.highPrice.toDouble()
         val low = candle.lowPrice.toDouble()

@@ -36,19 +36,19 @@ object StrategyParameters {
     // Parametry PivotPoints
     const val usePivotPoints: Boolean = true
 
-    // Parametry dla Bollinger Scalping Strategy
+    // Parametry dla Bollinger Scalping Strategy (używane w innej strategii)
     const val bbPeriod: Int = 20
     const val bbMultiplier: Double = 2.0
     const val atrMultiplierSL_BB: Double = 1.0
     const val atrMultiplierTP_BB: Double = 2.0
 
-    // Parametry dla RSIOverboughtOversoldTrendStrategy
+    // Parametry dla RSIOverboughtOversoldTrendStrategy (używane w innej strategii)
     const val rsiOversold: Double = 30.0
     const val rsiOverbought: Double = 70.0
     const val atrMultiplierSL_RSI: Double = 1.0
     const val atrMultiplierTP_RSI: Double = 2.0
 
-    // Parametry stop loss / take profit (fallback, gdy ATR nie jest dostępne)
+    // Parametry stop loss / take profit (fallback)
     const val stopLossPercent: Double = 0.005   // 0.5%
     const val takeProfitPercent: Double = 0.015   // 1.5%
 
@@ -56,6 +56,6 @@ object StrategyParameters {
     const val riskPerTrade: Double = 0.01
     const val baseRiskPercent: Double = 0.01
 
-    // Dodatkowy parametr dla wolumenu – bieżący wolumen musi być >= średniego * ratio
+    // Parametr dla wolumenu – bieżący wolumen musi być >= średniego * ratio
     const val volumeRatioThreshold: Double = 1.0
 }
