@@ -10,31 +10,29 @@ import model.StrategySignal
 import TimeUtils
 
 class EnhancedAdaptiveMACDStrategy(
-    private val fastPeriod: Int = 12,
-    private val slowPeriod: Int = 26,
-    private val signalPeriod: Int = 9,
-    private val rsiPeriod: Int = 14,
-    private val atrPeriod: Int = 14,
-    private val baseRiskPercent: Double = 0.01,
-    private val atrMultiplierSL: Double = 1.0,
-    private val atrMultiplierTP: Double = 3.0,
-    // Flaga wyboru adaptacyjnego MACD
-    private val useAdaptive: Boolean = true,
-    // Nowe opcje dla dodatkowych wskaźników
-    private val useStochastic: Boolean = true,
-    private val stochasticPeriod: Int = 14,
-    private val stochasticDPeriod: Int = 3,
-    private val stochasticOverbought: Double = 80.0,
-    private val stochasticOversold: Double = 20.0,
-    private val useAdx: Boolean = true,
-    private val adxPeriod: Int = 14,
-    private val adxThreshold: Double = 20.0,
-    private val useIchimoku: Boolean = true,
-    private val tenkanPeriod: Int = 9,
-    private val kijunPeriod: Int = 26,
-    private val senkouSpanBPeriod: Int = 52,
-    private val ichimokuDisplacement: Int = 26,
-    private val useParabolicSar: Boolean = false  // domyślnie wyłączone
+    private val fastPeriod: Int,
+    private val slowPeriod: Int,
+    private val signalPeriod: Int,
+    private val rsiPeriod: Int,
+    private val atrPeriod: Int,
+    private val baseRiskPercent: Double,
+    private val atrMultiplierSL: Double,
+    private val atrMultiplierTP: Double,
+    private val useAdaptive: Boolean,
+    private val useStochastic: Boolean,
+    private val stochasticPeriod: Int,
+    private val stochasticDPeriod: Int,
+    private val stochasticOverbought: Double,
+    private val stochasticOversold: Double,
+    private val useAdx: Boolean,
+    private val adxPeriod: Int,
+    private val adxThreshold: Double,
+    private val useIchimoku: Boolean,
+    private val tenkanPeriod: Int,
+    private val kijunPeriod: Int,
+    private val senkouSpanBPeriod: Int,
+    private val ichimokuDisplacement: Int,
+    private val useParabolicSar: Boolean
 ) : Strategy {
 
     override val name: String = "EnhancedAdaptiveMACDStrategy"

@@ -4,6 +4,7 @@ import API_KEY
 import SECRET_KEY
 import analyzer.LiquidityAnalyzer
 import com.binance.connector.futures.client.impl.UMFuturesClientImpl
+import config.StrategyParameters
 import engine.StrategyManager
 import executor.SimulationTradeExecutor
 import historical.HistoricalDataManager
@@ -24,9 +25,50 @@ object BacktestRunner {
         logger.info("Loaded total ${allKlines.size} klines for backtest on interval $interval")
 
         val strategies = listOf(
-            EnhancedAdaptiveMACDStrategy(fastPeriod = 12, slowPeriod = 26, signalPeriod = 9),
-            RSIOverboughtOversoldTrendStrategy(overbought = 80, oversold = 20),
-            BollingerScalpingStrategy(bbPeriod = 20)
+            EnhancedAdaptiveMACDStrategy(
+                fastPeriod = StrategyParameters.enhancedMacdFastPeriod,
+                slowPeriod = StrategyParameters.enhancedMacdSlowPeriod,
+                signalPeriod = StrategyParameters.enhancedMacdSignalPeriod,
+                rsiPeriod = StrategyParameters.rsiPeriod,
+                atrPeriod = StrategyParameters.atrPeriod,
+                baseRiskPercent = StrategyParameters.baseRiskPercent,
+                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
+                atrMultiplierTP = StrategyParameters.atrMultiplierTP,
+                useAdaptive = StrategyParameters.enhancedMacdUseAdaptive,
+                useStochastic = StrategyParameters.useStochastic,
+                stochasticPeriod = StrategyParameters.stochasticPeriod,
+                stochasticDPeriod = StrategyParameters.stochasticDPeriod,
+                stochasticOverbought = StrategyParameters.stochasticOverbought,
+                stochasticOversold = StrategyParameters.stochasticOversold,
+                useAdx = StrategyParameters.useAdx,
+                adxPeriod = StrategyParameters.adxPeriod,
+                adxThreshold = StrategyParameters.adxThreshold,
+                useIchimoku = StrategyParameters.useIchimoku,
+                tenkanPeriod = StrategyParameters.ichimokuTenkanPeriod,
+                kijunPeriod = StrategyParameters.ichimokuKijunPeriod,
+                senkouSpanBPeriod = StrategyParameters.ichimokuSenkouSpanBPeriod,
+                ichimokuDisplacement = StrategyParameters.ichimokuDisplacement,
+                useParabolicSar = StrategyParameters.useParabolicSar
+            ),
+            BollingerScalpingStrategy(
+                bbPeriod = StrategyParameters.bollingerBbPeriod,
+                bbNumDevs = StrategyParameters.bollingerBbNumDevs,
+                emaPeriod = StrategyParameters.bollingerEmaPeriod,
+                atrPeriod = StrategyParameters.atrPeriod,
+                baseRiskPercent = StrategyParameters.baseRiskPercent,
+                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
+                atrMultiplierTP = StrategyParameters.atrMultiplierTP
+            ),
+            RSIOverboughtOversoldTrendStrategy(
+                rsiPeriod = StrategyParameters.rsiPeriod,
+                overbought = StrategyParameters.rsiOverbought,
+                oversold = StrategyParameters.rsiOversold,
+                emaPeriod = StrategyParameters.rsiEmaPeriod,
+                atrPeriod = StrategyParameters.atrPeriod,
+                baseRiskPercent = StrategyParameters.baseRiskPercent,
+                atrMultiplierSL = StrategyParameters.atrMultiplierSL,
+                atrMultiplierTP = StrategyParameters.atrMultiplierTP
+            )
         )
 
         val simulationExecutor = SimulationTradeExecutor()
@@ -38,8 +80,7 @@ object BacktestRunner {
 
         for ((i, candle) in allKlines.withIndex()) {
             liquidityAnalyzer.processCandle(candle)
-            // Zamiast tworzyć nową listę kopiującą wszystkie elementy, używamy subList,
-            // która zwraca widok na oryginalną listę, co znacząco przyspiesza operację.
+            // Użycie subList dla optymalizacji – nie kopiujemy całej listy przy każdej iteracji.
             val slice = allKlines.subList(0, i + 1)
             manager.onNewCandle(candle, slice)
         }

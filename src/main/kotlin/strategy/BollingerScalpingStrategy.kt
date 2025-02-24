@@ -7,13 +7,13 @@ import model.SignalType
 import model.StrategySignal
 
 class BollingerScalpingStrategy(
-    private val bbPeriod: Int = 20,
-    private val bbNumDevs: Double = 2.0,
-    private val emaPeriod: Int = 50,
-    private val atrPeriod: Int = 14,
-    private val baseRiskPercent: Double = 0.01,
-    private val atrMultiplierSL: Double = 1.0,
-    private val atrMultiplierTP: Double = 3.0
+    private val bbPeriod: Int,
+    private val bbNumDevs: Double,
+    private val emaPeriod: Int,
+    private val atrPeriod: Int,
+    private val baseRiskPercent: Double,
+    private val atrMultiplierSL: Double,
+    private val atrMultiplierTP: Double
 ) : Strategy {
 
     override val name: String = "BollingerScalpingStrategy"
